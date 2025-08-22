@@ -1,0 +1,135 @@
+
+import React from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { 
+  Sparkles, 
+  Edit, 
+  Zap, 
+  Clock, 
+  Calendar,
+  MapPin,
+  Repeat
+} from "lucide-react";
+import { motion } from "framer-motion";
+
+export default function SmartInput({ 
+  value, 
+  onChange, 
+  onProcess, 
+  isProcessing, 
+  onManualCreate 
+}) {
+  const examples = [
+    "Remind me to call mom tomorrow at 3pm - make it aggressive",
+    "Buy groceries every Saturday morning - gentle reminders only",
+    "Take medication daily at 8am - relentless nagging",
+    "Submit weekly reports every Friday at 5pm",
+    "Doctor checkup every 3 months - normal intensity",
+    "Water plants every Tuesday and Thursday"
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Main Input Card */}
+      <Card className="p-8 bg-gradient-to-r from-white to-amber-50 dark:from-slate-800 dark:to-amber-900/20 border border-amber-200 dark:border-amber-700/50">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 bg-gradient-to-r from-amber-400 to-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Sparkles className="w-8 h-8 text-slate-900" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+            Smart Reminder Creation
+          </h2>
+          <p className="text-slate-600 dark:text-slate-300">
+            Just tell me what you need to remember, and I'll handle the details
+          </p>
+        </div>
+
+        <div className="max-w-2xl mx-auto">
+          <Textarea
+            placeholder="Type your reminder in plain English..."
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="min-h-[120px] text-lg border-amber-200 dark:border-amber-700 focus:border-amber-500 dark:focus:border-amber-400 resize-none"
+          />
+
+          <div className="flex gap-3 mt-4">
+            <Button
+              onClick={onProcess}
+              disabled={!value.trim() || isProcessing}
+              className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-900 font-semibold h-12"
+            >
+              {isProcessing ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-900 mr-2" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-5 h-5 mr-2" />
+                  Create Smart Reminder
+                </>
+              )}
+            </Button>
+            
+            <Button
+              variant="outline"
+              onClick={onManualCreate}
+              className="h-12"
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Manual Form
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* Examples */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card className="p-6">
+          <h3 className="font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-amber-500" />
+            Example Reminders
+          </h3>
+          <div className="space-y-2">
+            {examples.map((example, index) => (
+              <motion.button
+                key={index}
+                whileHover={{ x: 4 }}
+                onClick={() => onChange(example)}
+                className="block w-full text-left text-sm text-slate-600 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 p-2 rounded hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors"
+              >
+                "{example}"
+              </motion.button>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="font-semibold text-slate-900 dark:text-white mb-4">
+            What I Can Understand
+          </h3>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+              <Clock className="w-4 h-4 text-blue-500" />
+              Times: "at 3pm", "in 2 hours", "tomorrow morning"
+            </div>
+            <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+              <Calendar className="w-4 h-4 text-green-500" />
+              Dates: "tomorrow", "next Friday", "in 3 days"
+            </div>
+            <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+              <Repeat className="w-4 h-4 text-purple-500" />
+              Recurring: "daily", "every week", "monthly"
+            </div>
+            <div className="flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+              <MapPin className="w-4 h-4 text-red-500" />
+              Locations: "at the store", "when I get home"
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}

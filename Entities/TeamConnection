@@ -1,0 +1,32 @@
+{
+  "name": "TeamConnection",
+  "type": "object",
+  "properties": {
+    "requester_email": {
+      "type": "string",
+      "description": "Email of the user who sent the connection request"
+    },
+    "requestee_email": {
+      "type": "string",
+      "description": "Email of the user who received the connection request"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "rejected"
+      ],
+      "default": "pending",
+      "description": "Status of the connection request"
+    },
+    "message": {
+      "type": "string",
+      "description": "Optional message with the connection request"
+    }
+  },
+  "required": [
+    "requester_email",
+    "requestee_email"
+  ]
+}

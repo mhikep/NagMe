@@ -1,0 +1,481 @@
+
+import React from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Plus,
+  X,
+  MapPin,
+  Tag,
+  ArrowRight,
+  ArrowLeft,
+  Trash2,
+  Calendar as CalendarIcon,
+  Zap, // Added Zap icon
+  Users // Added Users icon
+} from "lucide-react";
+import LocationInput from "./LocationInput";
+import RecurrenceSelector from "./RecurrenceSelector";
+import { format } from "date-fns";
+
+export default function ReminderForm({ data, onChange, onNext, onBack, isEditing, users }) {
+  const handleChange = (field, value) => {
+    onChange(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleDateSelect = (selectedDate) => {
+    if (!selectedDate) return;
+    const currentTime = data.due_date ? new Date(data.due_date) : new Date();
+    const newDateTime = new Date(selectedDate);
+    newDateTime.setHours(currentTime.getHours());
+    newDateTime.setMinutes(currentTime.getMinutes());
+    newDateTime.setSeconds(0);
+    newDateTime.setMilliseconds(0);
+    handleChange("due_date", newDateTime.toISOString());
+  };
+
+  const handleTimeChange = (type, value) => {
+    const currentDateTime = data.due_date ? new Date(data.due_date) : new Date();
+    let hours24 = currentDateTime.getHours();
+    
+    let currentHour12 = hours24 % 12;
+    if (currentHour12 === 0) currentHour12 = 12;
+    let currentAmPm = hours24 >= 12 ? 'PM' : 'AM';
+    let currentMinute = currentDateTime.getMinutes();
+
+    if (type === 'hour') {
+      currentHour12 = parseInt(value, 10);
+    } else if (type === 'minute') {
+      currentMinute = parseInt(value, 10);
+    } else if (type === 'ampm') {
+      currentAmPm = value;
+    }
+
+    let finalHours24 = currentHour12;
+    if (currentAmPm === 'PM' && currentHour12 !== 12) {
+      finalHours24 += 12;
+    } else if (currentAmPm === 'AM' && currentHour12 === 12) {
+      finalHours24 = 0;
+    }
+    
+    currentDateTime.setHours(finalHours24);
+    currentDateTime.setMinutes(currentMinute);
+    currentDateTime.setSeconds(0);
+    currentDateTime.setMilliseconds(0);
+    handleChange("due_date", currentDateTime.toISOString());
+  };
+
+  const addTag = (tag) => {
+    if (tag && !(data.tags || []).includes(tag)) {
+      handleChange("tags", [...(data.tags || []), tag]);
+    }
+  };
+
+  const removeTag = (tagToRemove) => {
+    handleChange("tags", (data.tags || []).filter(tag => tag !== tagToRemove));
+  };
+
+  const addSubtask = () => {
+    const newSubtask = { title: "", completed: false };
+    handleChange("subtasks", [...(data.subtasks || []), newSubtask]);
+  };
+
+  const updateSubtask = (index, title) => {
+    const updatedSubtasks = [...(data.subtasks || [])];
+    updatedSubtasks[index] = { ...updatedSubtasks[index], title };
+    handleChange("subtasks", updatedSubtasks);
+  };
+
+  const removeSubtask = (index) => {
+    handleChange("subtasks", (data.subtasks || []).filter((_, i) => i !== index));
+  };
+
+  const isFormValid = data.title.trim() && data.due_date;
+
+  const hours = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
+  const minutes = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+  const selectedDate = data.due_date ? new Date(data.due_date) : null;
+
+  return (
+    <Card className="p-8">
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+            Reminder Details
+          </h2>
+          <p className="text-slate-600 dark:text-slate-300">
+            Fine-tune your reminder settings
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="title" className="text-base font-medium">
+              Title *
+            </Label>
+            <Input
+              id="title"
+              value={data.title}
+              onChange={(e) => handleChange("title", e.target.value)}
+              placeholder="What do you need to remember?"
+              className="mt-2 h-12 text-lg"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="description" className="text-base font-medium">
+              Description
+            </Label>
+            <Textarea
+              id="description"
+              value={data.description}
+              onChange={(e) => handleChange("description", e.target.value)}
+              placeholder="Add additional details..."
+              className="mt-2 min-h-[100px]"
+            />
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="due_date" className="text-base font-medium">
+              Due Date & Time *
+            </Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className="mt-2 h-12 w-full justify-start text-left font-normal"
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {selectedDate && !isNaN(selectedDate.getTime()) ? format(selectedDate, "PPP p") : <span>Pick a date & time</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={handleDateSelect}
+                  initialFocus
+                />
+                <div className="p-3 border-t border-slate-200 dark:border-slate-700">
+                  <h4 className="font-medium text-sm">Time</h4>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Select
+                      value={selectedDate && !isNaN(selectedDate.getTime()) ? (() => {
+                        const h = selectedDate.getHours();
+                        if (h === 0) return '12';
+                        if (h === 12) return '12';
+                        return (h % 12).toString();
+                      })() : undefined}
+                      onValueChange={(value) => handleTimeChange('hour', value)}
+                    >
+                      <SelectTrigger className="w-[80px]">
+                        <SelectValue placeholder="Hour" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {hours.map(hour => <SelectItem key={hour} value={hour}>{hour}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <span>:</span>
+                    <Select
+                      value={selectedDate && !isNaN(selectedDate.getTime()) ? selectedDate.getMinutes().toString().padStart(2, '0') : undefined}
+                      onValueChange={(value) => handleTimeChange('minute', value)}
+                    >
+                      <SelectTrigger className="w-[80px]">
+                        <SelectValue placeholder="Min" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {minutes.map(minute => <SelectItem key={minute} value={minute}>{minute}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={selectedDate && !isNaN(selectedDate.getTime()) ? (selectedDate.getHours() >= 12 ? 'PM' : 'AM') : undefined}
+                      onValueChange={(value) => handleTimeChange('ampm', value)}
+                    >
+                      <SelectTrigger className="w-[80px]">
+                        <SelectValue placeholder="AM/PM" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="PM">PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="priority" className="text-base font-medium">
+              Priority Level
+            </Label>
+            <Select
+              value={data.priority}
+              onValueChange={(value) => handleChange("priority", value)}
+            >
+              <SelectTrigger className="mt-2 h-12">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">🔵 Low Priority</SelectItem>
+                <SelectItem value="medium">🟡 Medium Priority</SelectItem>
+                <SelectItem value="high">🟠 High Priority</SelectItem>
+                <SelectItem value="critical">🔴 Critical Priority</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="category" className="text-base font-medium">
+              Category
+            </Label>
+            <Select
+              value={data.category}
+              onValueChange={(value) => handleChange("category", value)}
+            >
+              <SelectTrigger className="mt-2 h-12">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="work">💼 Work</SelectItem>
+                <SelectItem value="personal">👤 Personal</SelectItem>
+                <SelectItem value="health">🏥 Health</SelectItem>
+                <SelectItem value="shopping">🛍️ Shopping</SelectItem>
+                <SelectItem value="family">👨‍👩‍👧‍👦 Family</SelectItem>
+                <SelectItem value="finance">💰 Finance</SelectItem>
+                <SelectItem value="travel">✈️ Travel</SelectItem>
+                <SelectItem value="education">🎓 Education</SelectItem>
+                <SelectItem value="other">📌 Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <RecurrenceSelector
+          value={data.recurrence}
+          customValue={data.recurrence_custom}
+          onChange={(value) => handleChange("recurrence", value)}
+          onCustomChange={(value) => handleChange("recurrence_custom", value)}
+        />
+
+        <div>
+          <Label htmlFor="delegated_to_email" className="text-base font-medium flex items-center gap-2">
+            <Users className="w-4 h-4" />
+            Delegate To (Optional)
+          </Label>
+          <Select
+            value={data.delegated_to_email || ""}
+            onValueChange={(value) => handleChange("delegated_to_email", value === null ? null : value)}
+          >
+            <SelectTrigger className="mt-2 h-12">
+              <SelectValue placeholder="Assign to another user..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={null}>None (Just for me)</SelectItem> {/* Use empty string for 'null' value to correctly display placeholder */}
+              {users.map(user => (
+                <SelectItem key={user.id} value={user.email}>
+                  {user.full_name || user.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="location" className="text-base font-medium flex items-center gap-2">
+            <MapPin className="w-4 h-4" />
+            Location (Optional)
+          </Label>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Get reminded when you arrive at a specific place.
+          </p>
+          <LocationInput
+            value={data.location}
+            onChange={(value) => handleChange("location", value)}
+          />
+        </div>
+
+        <div>
+          <Label className="text-base font-medium flex items-center gap-2">
+            <Tag className="w-4 h-4" />
+            Tags
+          </Label>
+          <div className="mt-2">
+            <div className="flex flex-wrap gap-2 mb-3">
+              {(data.tags || []).map((tag, index) => (
+                <Badge key={index} variant="secondary" className="px-3 py-1">
+                  {tag}
+                  <button
+                    onClick={() => removeTag(tag)}
+                    className="ml-2 text-slate-500 hover:text-red-500"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+            <Input
+              placeholder="Add tags (press Enter)"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addTag(e.target.value.trim());
+                  e.target.value = "";
+                }
+              }}
+              className="h-12"
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <Label className="text-base font-medium">
+              Subtasks ({(data.subtasks || []).length})
+            </Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addSubtask}
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Subtask
+            </Button>
+          </div>
+
+          {(data.subtasks || []).length > 0 && (
+            <div className="space-y-2">
+              {(data.subtasks || []).map((subtask, index) => (
+                <div key={index} className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-600 rounded-lg">
+                  <Input
+                    value={subtask.title}
+                    onChange={(e) => updateSubtask(index, e.target.value)}
+                    placeholder={`Subtask ${index + 1}`}
+                    className="flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeSubtask(index)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label className="text-base font-medium text-slate-900 dark:text-white">
+                Enable Nagging Reminders
+              </Label>
+              <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
+                Keep showing alerts until you mark this as complete
+              </p>
+            </div>
+            <Switch
+              checked={data.nagging_enabled}
+              onCheckedChange={(checked) => handleChange("nagging_enabled", checked)}
+            />
+          </div>
+
+          {data.nagging_enabled && (
+            <div>
+              <Label className="text-base font-medium flex items-center gap-2">
+                <Zap className="w-4 h-4" />
+                Nagging Intensity
+              </Label>
+              <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 mb-3">
+                How persistent should the reminders be?
+              </p>
+              <Select
+                value={data.nagging_intensity || "normal"}
+                onValueChange={(value) => handleChange("nagging_intensity", value)}
+              >
+                <SelectTrigger className="h-12">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gentle">
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-500">🌙</span>
+                      <div>
+                        <div className="font-medium">Gentle</div>
+                        <div className="text-xs text-slate-500">Polite reminders every 30 minutes</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="normal">
+                    <div className="flex items-center gap-2">
+                      <span className="text-yellow-500">🔔</span>
+                      <div>
+                        <div className="font-medium">Normal</div>
+                        <div className="text-xs text-slate-500">Standard alerts every 10 minutes</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="aggressive">
+                    <div className="flex items-center gap-2">
+                      <span className="text-orange-500">⚡</span>
+                      <div>
+                        <div className="font-medium">Aggressive</div>
+                        <div className="text-xs text-slate-500">Urgent alerts every 5 minutes</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="relentless">
+                    <div className="flex items-center gap-2">
+                      <span className="text-red-500">🚨</span>
+                      <div>
+                        <div className="font-medium">Relentless</div>
+                        <div className="text-xs text-slate-500">Maximum intensity every 2 minutes</div>
+                      </div>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 pt-6">
+          <Button
+            variant="outline"
+            onClick={onBack}
+            className={`flex-1 h-12 ${isEditing ? 'hidden' : ''}`}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <Button
+            onClick={onNext}
+            disabled={!isFormValid}
+            className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-900 font-semibold h-12"
+          >
+            {isEditing ? 'Preview Changes' : 'Preview Reminder'}
+            <ArrowRight className="w-4 h-4 ml-2" />
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}

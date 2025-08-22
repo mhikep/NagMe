@@ -1,0 +1,21 @@
+{
+    "name": "nagme-web-app",
+    "version": "1.0.0",
+    "description": "NagMe - Never forget what matters most",
+    "main": "index.js",
+    "dependencies": {
+      "react": "^18.0.0",
+      "react-dom": "^18.0.0",
+      "react-router-dom": "^6.0.0",
+      "date-fns": "^2.0.0",
+      "framer-motion": "^10.0.0",
+      "lucide-react": "^0.263.0"
+    },
+    "scripts": {
+      "start": "react-scripts start",
+      "build": "react-scripts build"
+    },
+    "keywords": ["reminder", "productivity", "react"],
+    "author": "Your Name",
+    "license": "Private"
+  }

@@ -1,0 +1,145 @@
+import React from 'react';
+
+export default function ProjectExport() {
+  const projectStructure = {
+    entities: [
+      'Reminder.json',
+      'User.json', 
+      'TeamConnection.json'
+    ],
+    pages: [
+      'Dashboard.js',
+      'Create.js',
+      'Settings.js',
+      'Calendar.js',
+      'Analytics.js'
+    ],
+    components: {
+      common: ['OfflineIndicator.jsx'],
+      create: ['SmartInput.jsx', 'ReminderForm.jsx', 'PreviewCard.jsx', 'LocationInput.jsx', 'RecurrenceSelector.jsx'],
+      dashboard: ['QuickStats.jsx', 'ReminderCard.jsx', 'FilterTabs.jsx', 'NaggingAlert.jsx'],
+      settings: ['TeamMembers.jsx'],
+      calendar: ['CalendarDay.jsx', 'ReminderModal.jsx'],
+      utils: ['offlineStorage.js']
+    },
+    layout: 'Layout.js'
+  };
+
+  const exportInstructions = `
+# NagMe Project Export Instructions
+
+## What to Copy to Your React Native Project
+
+### 1. Business Logic (Copy Directly)
+These files contain your core business logic and can be used almost unchanged in React Native:
+
+**Entities (Data Models)**:
+- entities/Reminder.json → Convert to React Native entity class
+- entities/User.json → Convert to React Native entity class  
+- entities/TeamConnection.json → Convert to React Native entity class
+
+**Utility Functions**:
+- components/utils/offlineStorage.js → Adapt for AsyncStorage
+
+### 2. Component Logic (Adapt Structure)
+These contain your UI logic - keep the business logic, change the UI components:
+
+**Core Pages**:
+- pages/Dashboard.js → screens/DashboardScreen.js
+- pages/Create.js → screens/CreateScreen.js
+- pages/Settings.js → screens/SettingsScreen.js
+- pages/Calendar.js → screens/CalendarScreen.js
+- pages/Analytics.js → screens/AnalyticsScreen.js
+
+**Reusable Components**:
+- All components in components/ folder → Adapt to React Native components
+
+### 3. App Configuration
+- Layout.js → Navigation structure for React Native
+
+## Key Conversion Mappings
+
+### UI Components
+Web (Current) → React Native (Target)
+- <div> → <View>
+- <p>, <h1>, <span> → <Text>
+- <button> → <TouchableOpacity> or <Button>
+- <input> → <TextInput>
+- CSS classes → StyleSheet objects
+
+### Navigation
+- react-router-dom → @react-navigation/native
+- Link components → navigation.navigate()
+
+### Storage
+- localStorage → AsyncStorage
+- Web APIs → React Native APIs
+
+## File Export Checklist
+
+Copy this exact folder structure to your React Native project:
+
+\`\`\`
+src/
+├── entities/
+│   ├── Reminder.js
+│   ├── User.js
+│   └── TeamConnection.js
+├── screens/
+│   ├── DashboardScreen.js
+│   ├── CreateScreen.js
+│   ├── SettingsScreen.js
+│   ├── CalendarScreen.js
+│   └── AnalyticsScreen.js
+├── components/
+│   ├── common/
+│   ├── create/
+│   ├── dashboard/
+│   ├── settings/
+│   └── utils/
+└── navigation/
+    └── AppNavigator.js
+\`\`\`
+`;
+
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-6">NagMe Project Export Guide</h1>
+      
+      <div className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-lg mb-6">
+        <h2 className="text-xl font-semibold mb-4">Current Project Structure</h2>
+        <pre className="bg-white dark:bg-slate-800 p-4 rounded text-sm overflow-auto">
+{JSON.stringify(projectStructure, null, 2)}
+        </pre>
+      </div>
+
+      <div className="prose dark:prose-invert max-w-none">
+        <pre className="whitespace-pre-wrap text-sm bg-slate-100 dark:bg-slate-800 p-4 rounded">
+{exportInstructions}
+        </pre>
+      </div>
+
+      <div className="mt-8 p-6 bg-green-50 dark:bg-green-900/20 rounded-lg">
+        <h3 className="text-lg font-semibold mb-4">Ready-to-Copy Code Snippets</h3>
+        <p className="mb-4">Here are the key files you should copy to your React Native project:</p>
+        
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 p-4 rounded">
+            <h4 className="font-medium mb-2">Reminder Entity (Most Important)</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Copy the entire Reminder.json entity definition - this is your core data model</p>
+          </div>
+          
+          <div className="bg-white dark:bg-slate-800 p-4 rounded">
+            <h4 className="font-medium mb-2">Dashboard Business Logic</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Copy all the state management, data fetching, and reminder processing logic from Dashboard.js</p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 p-4 rounded">
+            <h4 className="font-medium mb-2">Smart Input Processing</h4>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Copy the natural language processing logic from SmartInput.jsx and Create.js</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,44 @@
+import React from "react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+
+export default function FilterTabs({ activeFilter, onFilterChange, stats }) {
+  return (
+    <Tabs value={activeFilter} onValueChange={onFilterChange}>
+      <TabsList className="bg-slate-100 dark:bg-slate-700">
+        <TabsTrigger value="all" className="relative">
+          All
+          {stats.total > 0 && (
+            <Badge variant="secondary" className="ml-2 text-xs">
+              {stats.total}
+            </Badge>
+          )}
+        </TabsTrigger>
+        <TabsTrigger value="pending" className="relative">
+          Pending
+          {stats.pending > 0 && (
+            <Badge variant="secondary" className="ml-2 text-xs">
+              {stats.pending}
+            </Badge>
+          )}
+        </TabsTrigger>
+        <TabsTrigger value="completed" className="relative">
+          Completed
+          {stats.completed > 0 && (
+            <Badge variant="secondary" className="ml-2 text-xs">
+              {stats.completed}
+            </Badge>
+          )}
+        </TabsTrigger>
+        <TabsTrigger value="overdue" className="relative">
+          Overdue
+          {stats.overdue > 0 && (
+            <Badge variant="destructive" className="ml-2 text-xs">
+              {stats.overdue}
+            </Badge>
+          )}
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+}

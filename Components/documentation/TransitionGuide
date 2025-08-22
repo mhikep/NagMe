@@ -1,0 +1,148 @@
+import React from 'react';
+
+export default function TransitionGuide() {
+  return (
+    <div className="max-w-4xl mx-auto p-6 prose prose-lg">
+      <h1>NagMe: React Native Transition Guide</h1>
+      
+      <h2>Overview</h2>
+      <p>This guide provides everything needed to transition the NagMe web app (built on base44) to a React Native mobile application with full native push notification capabilities.</p>
+
+      <h2>Architecture Documentation</h2>
+      
+      <h3>Current Tech Stack (Web)</h3>
+      <ul>
+        <li><strong>Framework:</strong> React 18 with functional components and hooks</li>
+        <li><strong>Styling:</strong> Tailwind CSS + shadcn/ui components</li>
+        <li><strong>State Management:</strong> React useState, useEffect hooks</li>
+        <li><strong>Routing:</strong> react-router-dom</li>
+        <li><strong>Data Layer:</strong> Custom entity SDK (Reminder, User, TeamConnection)</li>
+        <li><strong>Animations:</strong> Framer Motion</li>
+        <li><strong>Date Handling:</strong> date-fns</li>
+        <li><strong>Icons:</strong> Lucide React</li>
+        <li><strong>Notifications:</strong> Web Notifications API + HTML5 Audio</li>
+        <li><strong>Storage:</strong> localStorage + custom offline sync system</li>
+      </ul>
+
+      <h3>Target Tech Stack (React Native)</h3>
+      <ul>
+        <li><strong>Framework:</strong> React Native (latest stable)</li>
+        <li><strong>Navigation:</strong> @react-navigation/native</li>
+        <li><strong>Styling:</strong> StyleSheet + react-native-elements</li>
+        <li><strong>State Management:</strong> Same (React hooks)</li>
+        <li><strong>Data Layer:</strong> Same entity logic, different HTTP client</li>
+        <li><strong>Animations:</strong> react-native-reanimated</li>
+        <li><strong>Date Handling:</strong> date-fns (same)</li>
+        <li><strong>Icons:</strong> react-native-vector-icons</li>
+        <li><strong>Push Notifications:</strong> Firebase Cloud Messaging</li>
+        <li><strong>Storage:</strong> AsyncStorage + SQLite for offline</li>
+      </ul>
+
+      <h2>Step-by-Step Conversion Guide</h2>
+      
+      <h3>Phase 1: Environment Setup (1-2 days)</h3>
+      <ol>
+        <li><strong>Install React Native CLI:</strong> <code>npm install -g react-native-cli</code></li>
+        <li><strong>Create new React Native project:</strong> <code>react-native init NagMeMobile</code></li>
+        <li><strong>Install essential dependencies:</strong></li>
+      </ol>
+      
+      <pre><code>{`npm install @react-navigation/native @react-navigation/stack
+npm install react-native-push-notification
+npm install @react-native-async-storage/async-storage
+npm install react-native-vector-icons
+npm install date-fns
+npm install axios`}</code></pre>
+
+      <h3>Phase 2: Data Layer Migration (2-3 days)</h3>
+      <ol>
+        <li><strong>Copy entity files</strong> directly from entities/ folder</li>
+        <li><strong>Update HTTP client</strong> to use axios instead of fetch if needed</li>
+        <li><strong>Test entity methods</strong> in React Native environment</li>
+        <li><strong>Migrate offline storage</strong> from localStorage to AsyncStorage</li>
+      </ol>
+
+      <h3>Phase 3: Core Navigation (1 day)</h3>
+      <ol>
+        <li><strong>Set up React Navigation</strong> with stack navigator</li>
+        <li><strong>Create basic screen structure:</strong></li>
+        <ul>
+          <li>DashboardScreen</li>
+          <li>CreateScreen</li>
+          <li>SettingsScreen</li>
+          <li>CalendarScreen</li>
+          <li>AnalyticsScreen</li>
+        </ul>
+      </ol>
+
+      <h3>Phase 4: Component Migration (1-2 weeks)</h3>
+      <p>Convert each component following the pattern shown in ComponentMapping documentation.</p>
+
+      <h3>Phase 5: Push Notifications (3-4 days)</h3>
+      <ol>
+        <li><strong>Set up Firebase Cloud Messaging</strong></li>
+        <li><strong>Configure notification permissions</strong></li>
+        <li><strong>Implement local notifications</strong> for immediate reminders</li>
+        <li><strong>Set up background notification scheduling</strong></li>
+      </ol>
+
+      <h3>Phase 6: Testing & Polish (1 week)</h3>
+      <ol>
+        <li><strong>Test on iOS simulator</strong></li>
+        <li><strong>Test on real iOS device</strong></li>
+        <li><strong>Verify offline functionality</strong></li>
+        <li><strong>Test push notifications thoroughly</strong></li>
+      </ol>
+
+      <h2>Implementation Priorities</h2>
+      
+      <h3>Must Have (MVP)</h3>
+      <ul>
+        <li>✅ Basic navigation between screens</li>
+        <li>✅ Reminder CRUD operations</li>
+        <li>✅ Push notifications for due reminders</li>
+        <li>✅ Offline storage and sync</li>
+        <li>✅ User authentication</li>
+      </ul>
+
+      <h3>Should Have (V1.1)</h3>
+      <ul>
+        <li>🔄 Smart reminder creation with NLP</li>
+        <li>🔄 Location-based reminders</li>
+        <li>🔄 Team collaboration features</li>
+        <li>🔄 Recurring reminders</li>
+        <li>🔄 Analytics dashboard</li>
+      </ul>
+
+      <h2>Key Differences to Watch For</h2>
+      
+      <h3>Styling</h3>
+      <ul>
+        <li><strong>Web:</strong> CSS classes, Tailwind utilities</li>
+        <li><strong>React Native:</strong> StyleSheet objects, flexbox-based layouts</li>
+      </ul>
+
+      <h3>Navigation</h3>
+      <ul>
+        <li><strong>Web:</strong> react-router-dom with Link</li>
+        <li><strong>React Native:</strong> React Navigation with screen transitions</li>
+      </ul>
+
+      <h3>Storage</h3>
+      <ul>
+        <li><strong>Web:</strong> localStorage (synchronous)</li>
+        <li><strong>React Native:</strong> AsyncStorage (asynchronous, requires await)</li>
+      </ul>
+
+      <h3>Notifications</h3>
+      <ul>
+        <li><strong>Web:</strong> Browser Notification API (limited)</li>
+        <li><strong>React Native:</strong> Native push notifications (full featured)</li>
+      </ul>
+
+      <p className="text-lg font-semibold text-blue-600 mt-8">
+        This guide provides everything needed to successfully transition NagMe from a web app to a fully-featured React Native mobile application with reliable background notifications.
+      </p>
+    </div>
+  );
+}

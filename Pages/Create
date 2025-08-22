@@ -1,0 +1,413 @@
+
+import React, { useState, useEffect } from "react";
+import { Reminder } from "@/entities/Reminder";
+import { User } from "@/entities/User";
+import { InvokeLLM } from "@/integrations/Core";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import {
+  ArrowLeft,
+  Sparkles,
+  Plus,
+  Trash2,
+  MapPin,
+  Repeat,
+  Bell,
+  Zap,
+  Save
+} from "lucide-react";
+import { motion } from "framer-motion";
+import { format } from 'date-fns';
+import offlineStorage from "../components/utils/offlineStorage";
+
+import SmartInput from "../components/create/SmartInput";
+import ReminderForm from "../components/create/ReminderForm";
+import PreviewCard from "../components/create/PreviewCard";
+
+export default function Create() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const reminderId = searchParams.get('id');
+  const presetDueDate = searchParams.get('due_date');
+
+  const [currentStep, setCurrentStep] = useState(reminderId || presetDueDate ? "form" : "input");
+  const [naturalInput, setNaturalInput] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [connectedUsers, setConnectedUsers] = useState([]);
+  const [reminderData, setReminderData] = useState({
+    title: "",
+    description: "",
+    due_date: "",
+    priority: "medium",
+    category: "personal",
+    recurrence: "none",
+    recurrence_custom: {
+        type: "days",
+        interval: 1,
+        days_of_week: [],
+        end_date: ""
+    },
+    location: "",
+    nagging_enabled: true,
+    nagging_intensity: "normal",
+    tags: [],
+    subtasks: [],
+    delegated_to_email: ""
+  });
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const me = await User.me();
+        setCurrentUser(me);
+
+        const { TeamConnection } = await import("@/entities/TeamConnection");
+        const connections = await TeamConnection.list();
+        const acceptedConnections = connections.filter(conn =>
+          conn.status === "accepted" &&
+          (conn.requester_email === me.email || conn.requestee_email === me.email)
+        );
+
+        const allUsers = await User.list();
+        const connected = allUsers.filter(user =>
+          user.email !== me.email &&
+          acceptedConnections.some(conn =>
+            conn.requester_email === user.email ||
+            conn.requestee_email === user.email
+          )
+        );
+
+        setConnectedUsers(connected);
+      } catch (error) {
+        console.error("Failed to load users", error);
+      }
+
+      if (presetDueDate && !reminderId) {
+        try {
+          const presetDate = new Date(presetDueDate);
+          if (presetDate.getHours() === 0 && presetDate.getMinutes() === 0 && presetDate.getSeconds() === 0 && presetDate.getMilliseconds() === 0) {
+            presetDate.setHours(9, 0, 0, 0);
+          }
+          setReminderData(prev => ({
+            ...prev,
+            due_date: presetDate.toISOString()
+          }));
+        } catch (error) {
+          console.error("Error parsing preset due date:", error);
+        }
+      }
+
+      if (reminderId) {
+        try {
+          const data = await Reminder.get(reminderId);
+          setReminderData({
+            ...data,
+            tags: data.tags || [],
+            subtasks: data.subtasks || [],
+            recurrence_custom: data.recurrence_custom || { type: 'days', interval: 1, days_of_week: [], end_date: "" },
+            nagging_enabled: data.nagging_enabled !== false,
+            nagging_intensity: data.nagging_intensity || "normal",
+            delegated_to_email: data.delegated_to_email || ""
+          });
+        } catch (error) {
+          console.error("Error loading reminder for editing:", error);
+          navigate(createPageUrl("Dashboard"));
+        }
+      }
+    };
+    loadInitialData();
+  }, [reminderId, presetDueDate, navigate]);
+
+  const processNaturalLanguage = async () => {
+    if (!naturalInput.trim()) return;
+
+    setIsProcessing(true);
+    try {
+      const defaultTime = localStorage.getItem('nagme-default-notification-time') || '09:00';
+
+      const response = await InvokeLLM({
+        prompt: `You are an expert at parsing natural language into structured reminder data.
+Parse the following input: "${naturalInput}"
+
+Current date is: ${new Date().toISOString()}
+
+Your task is to extract the following fields. Pay extremely close attention to the rules, especially for the due_date and recurrence.
+
+1.  **due_date**: An ISO 8601 date-time string. This is the MOST CRITICAL field. You MUST parse times accurately.
+    *   **Time Parsing Rules**:
+        *   '3pm' or '3:00 PM' MUST be parsed as 15:00.
+        *   '8am' or '8:00 AM' MUST be parsed as 08:00.
+        *   'noon' is 12:00. 'midnight' is 00:00.
+    *   **Relative Dates**: Correctly interpret 'tomorrow', 'next week', 'in 2 hours'.
+    *   **Default Time**: If and ONLY IF no time is mentioned (e.g., "call mom tomorrow"), default the time to ${defaultTime} on that date. If a time is specified (like "3pm"), you MUST use that specified time.
+
+2.  **title**: A clear, concise reminder title. Remove all time, date, and intensity phrases from the title. For "Doctor checkup every 3 months", the title is "Doctor checkup".
+
+3.  **recurrence**: Determine recurrence pattern. Enum: ["none", "daily", "weekly", "monthly", "yearly", "custom"]. 
+    *   Use "custom" for ANY specific intervals like "every 3 months", "every 2 weeks", "every 5 days"
+    *   Use "daily" only for "daily" or "every day"
+    *   Use "weekly" only for "weekly" or "every week" 
+    *   Use "monthly" only for "monthly" or "every month"
+
+4.  **recurrence_custom**: Only fill this if recurrence is "custom". Object with:
+    *   type: "days", "weeks", or "months" 
+    *   interval: number (e.g., 3 for "every 3 months")
+    *   days_of_week: array of numbers (0=Sunday, 6=Saturday) - only for weekly custom
+    *   end_date: empty string unless specified
+
+5.  **nagging_intensity**: Determine the intensity from keywords. Enum: ["gentle", "normal", "aggressive", "relentless"]. Default to "normal" if no keyword is found.
+
+6.  **priority**: Determine priority from keywords. Enum: ["low", "medium", "high", "critical"]. Default to "medium".
+
+7.  **category**: Infer the category. Enum: ["work", "personal", "health", "shopping", "family", "finance", "travel", "education", "other"]. Default to "personal".
+
+8.  **description**: Any extra details.
+9.  **location**: Any mentioned location.
+10. **tags**: Array of relevant keywords as tags.
+
+**Recurrence Examples:**
+- "every 3 months" → recurrence: "custom", recurrence_custom: {type: "months", interval: 3, days_of_week: [], end_date: ""}
+- "every 2 weeks" → recurrence: "custom", recurrence_custom: {type: "weeks", interval: 2, days_of_week: [], end_date: ""}  
+- "every 5 days" → recurrence: "custom", recurrence_custom: {type: "days", interval: 5, days_of_week: [], end_date: ""}
+- "daily" → recurrence: "daily", recurrence_custom: null
+- "weekly" → recurrence: "weekly", recurrence_custom: null
+
+**Example Walkthrough:**
+Input: "Doctor checkup every 3 months - normal intensity"
+*   due_date: [Calculate appropriate date at ${defaultTime}]
+*   title: "Doctor checkup"
+*   recurrence: "custom"
+*   recurrence_custom: {type: "months", interval: 3, days_of_week: [], end_date: ""}
+*   nagging_intensity: "normal"
+*   category: "health"
+
+**Final Check:** Before providing the JSON, double-check that you have followed the time parsing rules for due_date and recurrence parsing rules exactly as instructed.`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            description: { type: "string" },
+            due_date: { type: "string" },
+            priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
+            category: { type: "string", enum: ["work", "personal", "health", "shopping", "family", "finance", "travel", "education", "other"] },
+            nagging_intensity: { type: "string", enum: ["gentle", "normal", "aggressive", "relentless"] },
+            location: { type: "string" },
+            recurrence: { type: "string", enum: ["none", "daily", "weekly", "monthly", "yearly", "custom"] },
+            recurrence_custom: { 
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ["days", "weeks", "months"] },
+                interval: { type: "number" },
+                days_of_week: { type: "array", items: { type: "number" } },
+                end_date: { type: "string" }
+              }
+            },
+            tags: { type: "array", items: { type: "string" } }
+          },
+          required: ["title", "due_date", "priority", "category", "nagging_intensity", "recurrence"]
+        }
+      });
+
+      let correctedResponse = { ...response };
+      
+      const timeMatches = naturalInput.toLowerCase().match(/(\d{1,2})\s*(am|pm)/g);
+      if (timeMatches && response.due_date) {
+        console.log("Found time mentions:", timeMatches);
+        
+        const timeMatch = timeMatches[0];
+        const hourMatch = timeMatch.match(/(\d{1,2})/);
+        const ampmMatch = timeMatch.match(/(am|pm)/);
+        
+        if (hourMatch && ampmMatch) {
+          let hour = parseInt(hourMatch[1]);
+          const ampm = ampmMatch[1];
+          
+          if (ampm === 'pm' && hour !== 12) {
+            hour += 12;
+          } else if (ampm === 'am' && hour === 12) {
+            hour = 0;
+          }
+          
+          const originalDate = new Date(response.due_date);
+          originalDate.setHours(hour, 0, 0, 0);
+          correctedResponse.due_date = originalDate.toISOString();
+          
+          console.log(`Corrected time from ${response.due_date} to ${correctedResponse.due_date}`);
+        }
+      }
+
+      setReminderData(prev => ({
+        ...prev,
+        ...correctedResponse,
+        nagging_enabled: true
+      }));
+
+      setCurrentStep("form");
+    } catch (error) {
+      console.error("Error processing natural language:", error);
+      setReminderData(prev => ({
+        ...prev,
+        title: naturalInput,
+        due_date: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      }));
+      setCurrentStep("form");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSaveReminder = async () => {
+    try {
+      if (reminderId) {
+        // Editing existing reminder
+        if (navigator.onLine) {
+          try {
+            await Reminder.update(reminderId, reminderData);
+          } catch (error) {
+            console.warn("Online update failed, using offline mode:", error);
+            await offlineStorage.updateReminder(reminderId, reminderData);
+          }
+        } else {
+          await offlineStorage.updateReminder(reminderId, reminderData);
+        }
+      } else {
+        // Creating new reminder
+        if (navigator.onLine) {
+          try {
+            await Reminder.create(reminderData);
+          } catch (error) {
+            console.warn("Online create failed, using offline mode:", error);
+            await offlineStorage.createReminder(reminderData);
+          }
+        } else {
+          await offlineStorage.createReminder(reminderData);
+        }
+      }
+      navigate(createPageUrl("Dashboard"));
+    } catch (error) {
+      console.error("Error saving reminder:", error);
+      alert("Failed to save reminder. Please try again.");
+    }
+  };
+
+  return (
+    <div className="p-6 lg:p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => navigate(createPageUrl("Dashboard"))}
+            className="hover:bg-slate-100 dark:hover:bg-slate-700"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+              {reminderId ? 'Edit Reminder' : 'Create New Reminder'}
+            </h1>
+            <p className="text-slate-600 dark:text-slate-300 mt-1">
+              {reminderId
+                ? 'Update the details of your reminder'
+                : presetDueDate
+                  ? `Creating reminder for ${format(new Date(presetDueDate), 'EEEE, MMMM d, yyyy')}`
+                  : 'Never forget what matters most to you'}
+            </p>
+          </div>
+        </div>
+
+        {/* Step Indicators - Hide if editing or coming from calendar with preset date */}
+        {!reminderId && !presetDueDate && (
+        <div className="flex items-center justify-center mb-8">
+          <div className="flex items-center gap-4">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
+              currentStep === "input"
+                ? "bg-amber-500 text-slate-900"
+                : currentStep === "form" || currentStep === "preview"
+                ? "bg-green-500 text-white"
+                : "bg-slate-200 text-slate-600"
+            }`}>
+              1
+            </div>
+            <div className={`w-16 h-1 rounded transition-all duration-300 ${
+              currentStep === "form" || currentStep === "preview"
+                ? "bg-green-500"
+                : "bg-slate-200"
+            }`}></div>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
+              currentStep === "form"
+                ? "bg-amber-500 text-slate-900"
+                : currentStep === "preview"
+                ? "bg-green-500 text-white"
+                : "bg-slate-200 text-slate-600"
+            }`}>
+              2
+            </div>
+            <div className={`w-16 h-1 rounded transition-all duration-300 ${
+              currentStep === "preview"
+                ? "bg-green-500"
+                : "bg-slate-200"
+            }`}></div>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${
+              currentStep === "preview"
+                ? "bg-amber-500 text-slate-900"
+                : "bg-slate-200 text-slate-600"
+            }`}>
+              3
+            </div>
+          </div>
+        </div>
+        )}
+
+        {/* Step Content */}
+        <motion.div
+          key={currentStep}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.3 }}
+        >
+          {/* SmartInput is only shown if not editing and not coming from a preset date */}
+          {currentStep === "input" && !reminderId && !presetDueDate && (
+            <SmartInput
+              value={naturalInput}
+              onChange={setNaturalInput}
+              onProcess={processNaturalLanguage}
+              isProcessing={isProcessing}
+              onManualCreate={() => setCurrentStep("form")}
+            />
+          )}
+
+          {/* ReminderForm is shown for 'form' step */}
+          {currentStep === "form" && (
+            <ReminderForm
+              data={reminderData}
+              onChange={setReminderData}
+              onNext={() => setCurrentStep("preview")}
+              // If presetDueDate, go back to Calendar, otherwise back to SmartInput
+              onBack={() => presetDueDate ? navigate(createPageUrl("Calendar")) : setCurrentStep("input")}
+              isEditing={!!reminderId}
+              users={connectedUsers}
+            />
+          )}
+
+          {/* PreviewCard is shown for 'preview' step */}
+          {currentStep === "preview" && (
+            <PreviewCard
+              data={reminderData}
+              onSave={handleSaveReminder}
+              onBack={() => setCurrentStep("form")}
+              isEditing={!!reminderId}
+            />
+          )}
+        </motion.div>
+      </div>
+    </div>
+  );
+}

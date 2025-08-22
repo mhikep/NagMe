@@ -1,0 +1,176 @@
+import React from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { 
+  ArrowLeft, 
+  Save, 
+  Clock, 
+  Calendar, 
+  MapPin, 
+  Tag, 
+  Repeat, 
+  Bell,
+  CheckCircle2
+} from "lucide-react";
+import { format } from "date-fns";
+
+const priorityConfig = {
+  low: { color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300", icon: "🔵" },
+  medium: { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300", icon: "🟡" },
+  high: { color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300", icon: "🟠" },
+  critical: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300", icon: "🔴" }
+};
+
+const categoryConfig = {
+  work: { color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300", icon: "💼" },
+  personal: { color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300", icon: "👤" },
+  health: { color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300", icon: "🏥" },
+  shopping: { color: "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300", icon: "🛍️" },
+  family: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300", icon: "👨‍👩‍👧‍👦" },
+  finance: { color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300", icon: "💰" },
+  travel: { color: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300", icon: "✈️" },
+  education: { color: "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300", icon: "🎓" },
+  other: { color: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300", icon: "📌" }
+};
+
+const intensityConfig = {
+  gentle: { color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300", icon: "🌙", name: "Gentle" },
+  normal: { color: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300", icon: "🔔", name: "Normal" },
+  aggressive: { color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300", icon: "⚡", name: "Aggressive" },
+  relentless: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300", icon: "🚨", name: "Relentless" }
+};
+
+export default function PreviewCard({ data, onSave, onBack, isEditing }) {
+  const dueDate = new Date(data.due_date);
+
+  return (
+    <Card className="p-8">
+      <div className="max-w-2xl mx-auto">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">
+            {isEditing ? 'Confirm Changes' : 'Preview Your Reminder'}
+          </h2>
+          <p className="text-slate-600 dark:text-slate-300">
+            {isEditing ? 'Review your changes before saving' : 'Review your reminder before saving'}
+          </p>
+        </div>
+
+        {/* Preview Card */}
+        <Card className="p-6 bg-gradient-to-r from-white to-amber-50 dark:from-slate-800 dark:to-amber-900/10 border border-amber-200 dark:border-amber-700/50 mb-6">
+          <div className="space-y-4">
+            {/* Title and Description */}
+            <div>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+                {data.title}
+              </h3>
+              {data.description && (
+                <p className="text-slate-600 dark:text-slate-300">
+                  {data.description}
+                </p>
+              )}
+            </div>
+
+            {/* Badges */}
+            <div className="flex flex-wrap gap-2">
+              <Badge className={priorityConfig[data.priority].color}>
+                <span className="mr-1">{priorityConfig[data.priority].icon}</span>
+                {data.priority} priority
+              </Badge>
+              
+              <Badge className={categoryConfig[data.category].color}>
+                <span className="mr-1">{categoryConfig[data.category].icon}</span>
+                {data.category}
+              </Badge>
+              
+              {data.nagging_enabled && data.nagging_intensity && data.nagging_intensity !== 'normal' && (
+                <Badge className={intensityConfig[data.nagging_intensity].color}>
+                  <span className="mr-1">{intensityConfig[data.nagging_intensity].icon}</span>
+                  {intensityConfig[data.nagging_intensity].name}
+                </Badge>
+              )}
+              
+              {data.recurrence !== "none" && (
+                <Badge variant="outline">
+                  <Repeat className="w-3 h-3 mr-1" />
+                  {data.recurrence}
+                </Badge>
+              )}
+              
+              {data.nagging_enabled && (
+                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                  <Bell className="w-3 h-3 mr-1" />
+                  Nagging enabled
+                </Badge>
+              )}
+            </div>
+
+            {/* Date and Time */}
+            <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+              <Calendar className="w-4 h-4" />
+              Due: {format(dueDate, "EEEE, MMMM d, yyyy 'at' h:mm a")}
+            </div>
+
+            {/* Location */}
+            {data.location && (
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                <MapPin className="w-4 h-4" />
+                {data.location}
+              </div>
+            )}
+
+            {/* Tags */}
+            {data.tags && data.tags.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Tag className="w-4 h-4 text-slate-500" />
+                {data.tags.map((tag, index) => (
+                  <Badge key={index} variant="outline" className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            {/* Subtasks */}
+            {data.subtasks && data.subtasks.length > 0 && (
+              <div className="border-t border-slate-200 dark:border-slate-600 pt-4">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">
+                  Subtasks ({data.subtasks.length})
+                </p>
+                <div className="space-y-2">
+                  {data.subtasks.map((subtask, index) => (
+                    <div key={index} className="flex items-center gap-2 text-sm">
+                      <CheckCircle2 className="w-3 h-3 text-slate-400" />
+                      <span className="text-slate-600 dark:text-slate-300">
+                        {subtask.title}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Action Buttons */}
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={onBack}
+            className="flex-1 h-12"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Edit Details
+          </Button>
+          <Button
+            onClick={onSave}
+            className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold h-12"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {isEditing ? 'Update Reminder' : 'Save Reminder'}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}

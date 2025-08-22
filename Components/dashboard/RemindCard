@@ -1,0 +1,286 @@
+
+import React from "react";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { 
+  CheckCircle2, 
+  Clock, 
+  AlertTriangle, 
+  MapPin, 
+  Tag,
+  Calendar,
+  Repeat,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  Users // Added Users icon
+} from "lucide-react";
+import { motion } from "framer-motion";
+import { format, isToday, isTomorrow, isPast } from "date-fns";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+export default function ReminderCard({ reminder, index, onComplete, onSnooze, onDelete, currentUser }) {
+  const priorityConfig = {
+    low: { color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300", icon: "🔵" },
+    medium: { color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300", icon: "🟡" },
+    high: { color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300", icon: "🟠" },
+    critical: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300", icon: "🔴" }
+  };
+
+  const categoryConfig = {
+    work: { color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300", icon: "💼" },
+    personal: { color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300", icon: "👤" },
+    health: { color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300", icon: "🏥" },
+    shopping: { color: "bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300", icon: "🛍️" },
+    family: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300", icon: "👨‍👩‍👧‍👦" },
+    finance: { color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300", icon: "💰" },
+    travel: { color: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300", icon: "✈️" },
+    education: { color: "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300", icon: "🎓" },
+    other: { color: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300", icon: "📌" }
+  };
+
+  const intensityConfig = {
+    gentle: { color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300", icon: "🌙", name: "Gentle" },
+    normal: { color: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300", icon: "🔔", name: "Normal" },
+    aggressive: { color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300", icon: "⚡", name: "Aggressive" },
+    relentless: { color: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300", icon: "🚨", name: "Relentless" }
+  };
+
+  const dueDate = new Date(reminder.due_date);
+  const isOverdue = isPast(dueDate) && reminder.status === "pending";
+  const isUpcoming = isToday(dueDate) || isTomorrow(dueDate);
+
+  const formatDueDate = () => {
+    if (isToday(dueDate)) return "Today";
+    if (isTomorrow(dueDate)) return "Tomorrow";
+    return format(dueDate, "MMM d, yyyy");
+  };
+
+  const formatDueTime = () => {
+    return format(dueDate, "h:mm a");
+  };
+
+  const getCardClasses = () => {
+    let classes = "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-all duration-300 ";
+    
+    if (isOverdue && reminder.nagging_enabled) {
+      const intensity = reminder.nagging_intensity || 'normal';
+      if (intensity === 'relentless') {
+        classes += "border-red-500 dark:border-red-400 shadow-red-500/30 reminder-pulse ";
+      } else if (intensity === 'aggressive') {
+        classes += "border-orange-500 dark:border-orange-400 shadow-orange-500/20 ";
+      } else { // Covers 'gentle' and 'normal'
+        classes += "border-red-500 dark:border-red-400 shadow-red-500/20 ";
+      }
+    } else if (isUpcoming) {
+      classes += "border-amber-500 dark:border-amber-400 shadow-amber-500/20 ";
+    }
+    
+    if (reminder.status === "completed") {
+      classes += "opacity-60 ";
+    }
+    
+    return classes;
+  };
+
+  const handleCustomSnooze = () => {
+    const minutes = window.prompt("Snooze for how many minutes?", "15");
+    if (minutes !== null) { // User clicked OK or Cancel
+      const parsedMinutes = parseInt(minutes, 10);
+      if (!isNaN(parsedMinutes) && parsedMinutes > 0) {
+        onSnooze(parsedMinutes);
+      } else if (minutes.trim() !== "") { // If input is not empty but not a valid positive number
+        alert("Please enter a valid positive number of minutes.");
+      }
+      // If minutes is empty or null (user clicked cancel), do nothing.
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ delay: index * 0.05 }}
+    >
+      <Card className={`p-6 ${getCardClasses()}`}>
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <h3 className={`text-lg font-semibold mb-2 ${
+              reminder.status === "completed" 
+                ? "line-through text-slate-500 dark:text-slate-400" 
+                : "text-slate-900 dark:text-white"
+            }`}>
+              {reminder.title}
+            </h3>
+            
+            {reminder.description && (
+              <p className="text-slate-600 dark:text-slate-300 mb-3">
+                {reminder.description}
+              </p>
+            )}
+            
+            {/* Tags and Metadata */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              <Badge className={priorityConfig[reminder.priority].color}>
+                <span className="mr-1">{priorityConfig[reminder.priority].icon}</span>
+                {reminder.priority}
+              </Badge>
+              
+              <Badge className={categoryConfig[reminder.category].color}>
+                <span className="mr-1">{categoryConfig[reminder.category].icon}</span>
+                {reminder.category}
+              </Badge>
+              
+              {reminder.nagging_enabled && reminder.nagging_intensity && reminder.nagging_intensity !== 'normal' && (
+                <Badge className={intensityConfig[reminder.nagging_intensity].color}>
+                  <span className="mr-1">{intensityConfig[reminder.nagging_intensity].icon}</span>
+                  {intensityConfig[reminder.nagging_intensity].name}
+                </Badge>
+              )}
+              
+              {reminder.recurrence !== "none" && (
+                <Badge variant="outline" className="border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300">
+                  <Repeat className="w-3 h-3 mr-1" />
+                  {reminder.recurrence}
+                </Badge>
+              )}
+
+              {reminder.delegated_to_email && currentUser && (
+                <Badge variant="outline" className="border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300">
+                  <Users className="w-3 h-3 mr-1" />
+                  {reminder.created_by?.toLowerCase() === currentUser.email?.toLowerCase() 
+                    ? `Delegated to ${reminder.delegated_to_email.split('@')[0]}`
+                    : `From ${reminder.created_by.split('@')[0]}`
+                  }
+                </Badge>
+              )}
+              
+              {reminder.location && (
+                <Badge variant="outline" className="border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300">
+                  <MapPin className="w-3 h-3 mr-1" />
+                  {reminder.location.split('|')[0]}
+                </Badge>
+              )}
+              
+              {reminder.snooze_count > 0 && (
+                <Badge variant="outline" className="border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300">
+                  Snoozed {reminder.snooze_count}x
+                </Badge>
+              )}
+            </div>
+            
+            {/* Due Date Info */}
+            <div className="flex items-center gap-4 text-sm">
+              <div className={`flex items-center gap-2 ${
+                isOverdue ? "text-red-600 dark:text-red-400" : "text-slate-600 dark:text-slate-300"
+              }`}>
+                <Calendar className="w-4 h-4" />
+                {formatDueDate()} at {formatDueTime()}
+              </div>
+              
+              {isOverdue && (
+                <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
+                  <AlertTriangle className="w-4 h-4" />
+                  Overdue
+                </div>
+              )}
+            </div>
+          </div>
+          
+          {/* Actions */}
+          <div className="flex items-center gap-2 ml-4">
+            {reminder.status === "pending" ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onComplete()}
+                  className="text-green-600 dark:text-green-400 border-green-600 dark:border-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 hidden md:flex"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-1" />
+                  Complete
+                </Button>
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="ghost" className="text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">
+                      <MoreHorizontal className="w-5 h-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                    <DropdownMenuItem onClick={() => onComplete()} className="md:hidden text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700">
+                       <CheckCircle2 className="w-4 h-4 mr-2" />
+                       Complete
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onSnooze(10)} className="text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700">
+                      <Clock className="w-4 h-4 mr-2" />
+                      Snooze 10 min
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleCustomSnooze} className="text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700">
+                      <Clock className="w-4 h-4 mr-2" />
+                      Snooze Custom...
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <Link to={createPageUrl(`Create?id=${reminder.id}`)}>
+                      <DropdownMenuItem className="text-slate-900 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700">
+                        <Edit className="w-4 h-4 mr-2" />
+                        Edit
+                      </DropdownMenuItem>
+                    </Link>
+                    <DropdownMenuItem onClick={onDelete} className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : (
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                <CheckCircle2 className="w-3 h-3 mr-1" />
+                Completed
+              </Badge>
+            )}
+          </div>
+        </div>
+        
+        {/* Subtasks */}
+        {reminder.subtasks && reminder.subtasks.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-600">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Subtasks ({reminder.subtasks.filter(st => st.completed).length}/{reminder.subtasks.length})
+            </p>
+            <div className="space-y-1">
+              {reminder.subtasks.slice(0, 3).map((subtask, idx) => (
+                <div key={idx} className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 className={`w-3 h-3 ${
+                    subtask.completed 
+                      ? "text-green-600 dark:text-green-400" 
+                      : "text-slate-400"
+                  }`} />
+                  <span className={subtask.completed ? "line-through text-slate-500 dark:text-slate-400" : "text-slate-600 dark:text-slate-300"}>
+                    {subtask.title}
+                  </span>
+                </div>
+              ))}
+              {reminder.subtasks.length > 3 && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 pl-5">
+                  +{reminder.subtasks.length - 3} more subtasks
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
+    </motion.div>
+  );
+}

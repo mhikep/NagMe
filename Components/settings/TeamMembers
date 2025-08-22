@@ -1,0 +1,338 @@
+
+import React, { useState, useEffect } from "react";
+import { User } from "@/entities/User";
+import { TeamConnection } from "@/entities/TeamConnection";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Users,
+  UserPlus,
+  UserCheck,
+  UserX,
+  Mail,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Send
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+export default function TeamMembers({ currentUser }) {
+  const [connections, setConnections] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [sentRequests, setSentRequests] = useState([]);
+  const [newConnectionEmail, setNewConnectionEmail] = useState("");
+  const [connectionMessage, setConnectionMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (currentUser) {
+        loadConnections();
+    }
+  }, [currentUser]);
+
+  const loadConnections = async () => {
+    if (!currentUser?.email) {
+      setIsLoading(false);
+      return;
+    }
+    
+    try {
+      setIsLoading(true);
+      const allConnections = await TeamConnection.list();
+      
+      // Filter connections correctly
+      const accepted = allConnections.filter(
+        conn => conn.status === "accepted" && 
+        (conn.requester_email.toLowerCase() === currentUser.email.toLowerCase() || conn.requestee_email.toLowerCase() === currentUser.email.toLowerCase())
+      );
+      
+      // Pending requests TO the current user (they need to respond)
+      const pending = allConnections.filter(
+        conn => conn.status === "pending" && conn.requestee_email.toLowerCase() === currentUser.email.toLowerCase()
+      );
+      
+      // Requests sent BY the current user (waiting for response)
+      const sent = allConnections.filter(
+        conn => conn.status === "pending" && conn.requester_email.toLowerCase() === currentUser.email.toLowerCase()
+      );
+      
+      setConnections(accepted);
+      setPendingRequests(pending);
+      setSentRequests(sent);
+      
+    } catch (error) {
+      console.error("Error loading connections:", error);
+      alert(`Failed to load team connections: ${error.message}. Please refresh the page.`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendConnectionRequest = async () => {
+    if (!newConnectionEmail.trim() || !currentUser?.email) return;
+    
+    try {
+        const requesteeEmail = newConnectionEmail.trim();
+
+        if (requesteeEmail.toLowerCase() === currentUser.email.toLowerCase()) {
+            alert("You cannot send a connection request to yourself!");
+            return;
+        }
+
+        // Check for existing connections by loading all and filtering in JS (case-insensitive)
+        const allConnections = await TeamConnection.list();
+        const existingConnection = allConnections.find(conn => 
+          (conn.requester_email.toLowerCase() === currentUser.email.toLowerCase() && conn.requestee_email.toLowerCase() === requesteeEmail.toLowerCase()) ||
+          (conn.requester_email.toLowerCase() === requesteeEmail.toLowerCase() && conn.requestee_email.toLowerCase() === currentUser.email.toLowerCase())
+        );
+
+        if (existingConnection) {
+            alert(`A connection ${existingConnection.status === 'pending' ? 'request' : ''} already exists between you and this user (Status: ${existingConnection.status}).`);
+            return;
+        }
+      
+      // Optimistically attempt to create the connection
+      await TeamConnection.create({
+        requester_email: currentUser.email,
+        requestee_email: requesteeEmail,
+        message: connectionMessage.trim() || `${currentUser.full_name || currentUser.email} would like to connect with you.`,
+        status: "pending"
+      });
+      
+      setNewConnectionEmail("");
+      setConnectionMessage("");
+      loadConnections();
+      
+      alert("Connection request sent successfully!");
+
+    } catch (error) {
+      console.error("Error sending connection request:", error);
+      
+      if (error.response?.status === 400 || error.response?.status === 404) {
+          alert(`Failed to send request. The user "${newConnectionEmail.trim()}" might not exist. Please check the email address and try again.`);
+      } else if (error.response?.status === 401) {
+          alert("Authentication error. Please try logging out and logging back in.");
+      } else {
+          alert(`Failed to send connection request. Please try again.`);
+      }
+    }
+  };
+
+  const handleConnectionRequest = async (connectionId, action) => {
+    try {
+      await TeamConnection.update(connectionId, {
+        status: action === "accept" ? "accepted" : "rejected"
+      });
+      loadConnections();
+    } catch (error) {
+      console.error("Error handling connection request:", error);
+      alert(`Failed to ${action} request: ${error.message}`);
+    }
+  };
+
+  const removeConnection = async (connectionId) => {
+    if (!window.confirm("Are you sure you want to remove this connection?")) return;
+    
+    try {
+      await TeamConnection.delete(connectionId);
+      loadConnections();
+    } catch (error) {
+      console.error("Error removing connection:", error);
+      alert(`Failed to remove connection: ${error.message}`);
+    }
+  };
+
+  const getConnectionPartner = (connection) => {
+    return connection.requester_email.toLowerCase() === currentUser?.email.toLowerCase()
+      ? connection.requestee_email 
+      : connection.requester_email;
+  };
+
+  if (!currentUser) {
+      return (
+          <Card className="p-6">
+              <div className="text-center text-slate-500">Loading user data...</div>
+          </Card>
+      )
+  }
+
+  return (
+    <Card className="p-6">
+      <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+        <Users className="w-5 h-5 text-blue-500" />
+        Team Members
+      </h2>
+      <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+        Connect with other users to delegate reminders to them.
+      </p>
+
+      <div className="mb-8 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+        <h3 className="font-medium text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+          <UserPlus className="w-4 h-4" />
+          Add New Connection
+        </h3>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-sm">Email Address</Label>
+            <Input
+              value={newConnectionEmail}
+              onChange={(e) => setNewConnectionEmail(e.target.value)}
+              placeholder="user@example.com"
+              className="mt-1"
+            />
+          </div>
+          <div>
+            <Label className="text-sm">Message (Optional)</Label>
+            <Textarea
+              value={connectionMessage}
+              onChange={(e) => setConnectionMessage(e.target.value)}
+              placeholder="Hi! I'd like to connect so we can delegate reminders to each other."
+              className="mt-1 h-20"
+            />
+          </div>
+          <Button 
+            onClick={sendConnectionRequest}
+            disabled={!newConnectionEmail.trim() || isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700"
+          >
+            <Send className="w-4 h-4 mr-2" />
+            Send Connection Request
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+          <div className="text-center text-slate-500 py-8">Loading connections...</div>
+      ) : (
+          <>
+            {pendingRequests.length > 0 && (
+                <div className="mb-6">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-500" />
+                    Pending Requests ({pendingRequests.length})
+                </h3>
+                <div className="space-y-3">
+                    {pendingRequests.map((request) => (
+                    <motion.div
+                        key={request.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 border border-slate-200 dark:border-slate-600 rounded-lg"
+                    >
+                        <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                            <Mail className="w-4 h-4 text-slate-500" />
+                            <span className="font-medium text-slate-900 dark:text-white">
+                                {request.requester_email}
+                            </span>
+                            </div>
+                            {request.message && (
+                            <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
+                                "{request.message}"
+                            </p>
+                            )}
+                        </div>
+                        <div className="flex gap-2">
+                            <Button
+                            size="sm"
+                            onClick={() => handleConnectionRequest(request.id, "accept")}
+                            className="bg-green-600 hover:bg-green-700"
+                            >
+                            <CheckCircle2 className="w-4 h-4 mr-1" />
+                            Accept
+                            </Button>
+                            <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleConnectionRequest(request.id, "reject")}
+                            className="border-red-300 text-red-600 hover:bg-red-50"
+                            >
+                            <XCircle className="w-4 h-4 mr-1" />
+                            Decline
+                            </Button>
+                        </div>
+                        </div>
+                    </motion.div>
+                    ))}
+                </div>
+                </div>
+            )}
+
+            {sentRequests.length > 0 && (
+                <div className="mb-6">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                    <Send className="w-4 h-4 text-blue-500" />
+                    Sent Requests ({sentRequests.length})
+                </h3>
+                <div className="space-y-2">
+                    {sentRequests.map((request) => (
+                    <div
+                        key={request.id}
+                        className="flex items-center justify-between p-3 border border-slate-200 dark:border-slate-600 rounded-lg"
+                    >
+                        <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-amber-500" />
+                        <span className="text-slate-900 dark:text-white">{request.requestee_email}</span>
+                        <Badge variant="outline" className="text-xs">Pending</Badge>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+                </div>
+            )}
+
+            <div>
+                <h3 className="font-medium text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-green-500" />
+                Connected Team Members ({connections.length})
+                </h3>
+                
+                {connections.length > 0 ? (
+                <div className="space-y-2">
+                    {connections.map((connection) => (
+                    <motion.div
+                        key={connection.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center justify-between p-3 border border-slate-200 dark:border-slate-600 rounded-lg"
+                    >
+                        <div className="flex items-center gap-2">
+                        <UserCheck className="w-4 h-4 text-green-500" />
+                        <span className="text-slate-900 dark:text-white">
+                            {getConnectionPartner(connection)}
+                        </span>
+                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 text-xs">
+                            Connected
+                        </Badge>
+                        </div>
+                        <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => removeConnection(connection.id)}
+                        className="border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                        <UserX className="w-4 h-4 mr-1" />
+                        Remove
+                        </Button>
+                    </motion.div>
+                    ))}
+                </div>
+                ) : (
+                <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                    <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No team members connected yet.</p>
+                    <p className="text-sm">Send connection requests to start delegating reminders.</p>
+                </div>
+                )}
+            </div>
+        </>
+      )}
+    </Card>
+  );
+}

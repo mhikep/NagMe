@@ -1,0 +1,177 @@
+import React from 'react';
+
+export default function ReplitSetupGuide() {
+  return (
+    <div className="max-w-4xl mx-auto p-6 prose dark:prose-invert">
+      <h1>Setting Up NagMe in Replit for React Native</h1>
+
+      <h2>Step 1: Create React Native Project in Replit</h2>
+      <ol>
+        <li>Go to <a href="https://replit.com" target="_blank">replit.com</a></li>
+        <li>Click "Create Repl"</li>
+        <li>Search for "React Native" template</li>
+        <li>Name your project: "NagMeMobile"</li>
+        <li>Click "Create Repl"</li>
+      </ol>
+
+      <h2>Step 2: Project Structure Setup</h2>
+      <p>Once your Replit is created, set up this folder structure:</p>
+
+      <pre><code>{`📁 NagMeMobile/
+├── 📁 src/
+│   ├── 📁 entities/
+│   │   ├── Reminder.js
+│   │   ├── User.js
+│   │   └── TeamConnection.js
+│   ├── 📁 screens/
+│   │   ├── DashboardScreen.js
+│   │   ├── CreateScreen.js
+│   │   ├── SettingsScreen.js
+│   │   ├── CalendarScreen.js
+│   │   └── AnalyticsScreen.js
+│   ├── 📁 components/
+│   │   ├── 📁 common/
+│   │   ├── 📁 create/
+│   │   ├── 📁 dashboard/
+│   │   └── 📁 utils/
+│   └── 📁 navigation/
+│       └── AppNavigator.js
+├── App.js
+├── package.json
+└── README.md`}</code></pre>
+
+      <h2>Step 3: Install Essential Dependencies</h2>
+      <p>In the Replit shell, run these commands:</p>
+
+      <pre><code>{`npm install @react-navigation/native @react-navigation/stack
+npm install react-native-push-notification
+npm install @react-native-async-storage/async-storage
+npm install react-native-vector-icons
+npm install date-fns
+npm install axios
+npm install @react-native-community/push-notification-ios`}</code></pre>
+
+      <h2>Step 4: Copy Your Business Logic</h2>
+      
+      <h3>4a. Entities (Copy Exactly)</h3>
+      <p>Copy your entity JSON files and convert them to JavaScript classes:</p>
+      
+      <pre><code>{`// src/entities/Reminder.js
+class Reminder {
+  static async list(sort = '-created_date', limit = 100) {
+    // Your existing list logic
+  }
+  
+  static async create(data) {
+    // Your existing create logic
+  }
+  
+  static async update(id, data) {
+    // Your existing update logic
+  }
+  
+  static async delete(id) {
+    // Your existing delete logic
+  }
+}
+
+export default Reminder;`}</code></pre>
+
+      <h3>4b. Core Business Logic</h3>
+      <p>Copy these key functions from your web app:</p>
+      
+      <ul>
+        <li><strong>From Dashboard.js:</strong> All reminder management functions</li>
+        <li><strong>From Create.js:</strong> Natural language processing logic</li>
+        <li><strong>From Settings.js:</strong> User preference management</li>
+        <li><strong>From offlineStorage.js:</strong> Offline sync logic (adapt for AsyncStorage)</li>
+      </ul>
+
+      <h2>Step 5: Create Your First Screen</h2>
+      <p>Start with a basic Dashboard screen:</p>
+
+      <pre><code>{`// src/screens/DashboardScreen.js
+import React, { useState, useEffect } from 'react';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import Reminder from '../entities/Reminder';
+
+export default function DashboardScreen() {
+  const [reminders, setReminders] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadReminders();
+  }, []);
+
+  const loadReminders = async () => {
+    try {
+      const data = await Reminder.list();
+      setReminders(data);
+    } catch (error) {
+      console.error('Error loading reminders:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <ScrollView style={styles.container}>
+      <Text style={styles.title}>NagMe Dashboard</Text>
+      {/* Add your reminder list here */}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
+    backgroundColor: '#f5f5f5',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+});`}</code></pre>
+
+      <h2>Step 6: Test the Setup</h2>
+      <ol>
+        <li>Click "Run" in Replit</li>
+        <li>You should see your basic React Native app running</li>
+        <li>The Replit mobile preview will show your app</li>
+        <li>Test that your entities and basic screens work</li>
+      </ol>
+
+      <h2>What to Tell Replit AI</h2>
+      <p>When working with Replit's AI, provide this context:</p>
+
+      <blockquote>
+        <p>"I'm migrating a React web app called NagMe to React Native. It's a reminder app with these key features:</p>
+        <ul>
+          <li>Reminder CRUD operations with entities</li>
+          <li>Natural language processing for creating reminders</li>
+          <li>Offline sync capabilities</li>
+          <li>Push notifications for due reminders</li>
+          <li>User settings and team collaboration</li>
+        </ul>
+        <p>I have all the business logic ready and need help adapting the UI components from web to React Native. The core entities are Reminder, User, and TeamConnection."</p>
+      </blockquote>
+
+      <h2>Quick Win Strategy</h2>
+      <p>To see immediate progress:</p>
+      <ol>
+        <li><strong>Day 1:</strong> Set up project structure and entities</li>
+        <li><strong>Day 2:</strong> Get basic Dashboard screen working</li>
+        <li><strong>Day 3:</strong> Add basic reminder creation</li>
+        <li><strong>Day 4:</strong> Add push notifications</li>
+        <li><strong>Day 5:</strong> Polish and test</li>
+      </ol>
+
+      <div className="bg-green-100 dark:bg-green-900/20 p-4 rounded-lg mt-6">
+        <h3>🚀 Pro Tip</h3>
+        <p>Start with just the Dashboard screen and one entity (Reminder). Get that working perfectly, then gradually add more features. This approach ensures you have a working foundation before adding complexity.</p>
+      </div>
+    </div>
+  );
+}

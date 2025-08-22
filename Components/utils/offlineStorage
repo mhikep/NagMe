@@ -1,0 +1,283 @@
+// Offline Storage Manager for NagMe
+// Handles local storage, caching, and sync queue management
+
+class OfflineStorageManager {
+  constructor() {
+    this.isOnline = navigator.onLine;
+    this.syncQueue = this.getSyncQueue();
+    this.setupOnlineListeners();
+  }
+
+  // Check if we're online
+  isOnlineNow() {
+    return navigator.onLine;
+  }
+
+  // Setup listeners for online/offline events
+  setupOnlineListeners() {
+    window.addEventListener('online', () => {
+      this.isOnline = true;
+      this.processSyncQueue();
+      this.notifyOnlineStatusChange(true);
+    });
+
+    window.addEventListener('offline', () => {
+      this.isOnline = false;
+      this.notifyOnlineStatusChange(false);
+    });
+  }
+
+  // Notify components about online status changes
+  notifyOnlineStatusChange(isOnline) {
+    window.dispatchEvent(new CustomEvent('nagme-connection-change', {
+      detail: { isOnline }
+    }));
+  }
+
+  // Local storage keys
+  getStorageKey(type) {
+    const keys = {
+      reminders: 'nagme-offline-reminders',
+      user: 'nagme-offline-user',
+      syncQueue: 'nagme-sync-queue',
+      lastSync: 'nagme-last-sync'
+    };
+    return keys[type];
+  }
+
+  // Cache reminders locally
+  cacheReminders(reminders) {
+    try {
+      localStorage.setItem(this.getStorageKey('reminders'), JSON.stringify({
+        data: reminders,
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      console.warn('Failed to cache reminders:', error);
+    }
+  }
+
+  // Get cached reminders
+  getCachedReminders() {
+    try {
+      const cached = localStorage.getItem(this.getStorageKey('reminders'));
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return parsed.data || [];
+      }
+    } catch (error) {
+      console.warn('Failed to get cached reminders:', error);
+    }
+    return [];
+  }
+
+  // Cache user data
+  cacheUser(userData) {
+    try {
+      localStorage.setItem(this.getStorageKey('user'), JSON.stringify({
+        data: userData,
+        timestamp: new Date().toISOString()
+      }));
+    } catch (error) {
+      console.warn('Failed to cache user data:', error);
+    }
+  }
+
+  // Get cached user data
+  getCachedUser() {
+    try {
+      const cached = localStorage.getItem(this.getStorageKey('user'));
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return parsed.data || null;
+      }
+    } catch (error) {
+      console.warn('Failed to get cached user data:', error);
+    }
+    return null;
+  }
+
+  // Add action to sync queue
+  addToSyncQueue(action) {
+    const queue = this.getSyncQueue();
+    const queueItem = {
+      id: Date.now() + Math.random(), // Simple unique ID
+      action,
+      timestamp: new Date().toISOString(),
+      attempts: 0
+    };
+    
+    queue.push(queueItem);
+    this.saveSyncQueue(queue);
+    
+    // If we're online, try to sync immediately
+    if (this.isOnlineNow()) {
+      this.processSyncQueue();
+    }
+    
+    return queueItem.id;
+  }
+
+  // Get sync queue
+  getSyncQueue() {
+    try {
+      const queue = localStorage.getItem(this.getStorageKey('syncQueue'));
+      return queue ? JSON.parse(queue) : [];
+    } catch (error) {
+      console.warn('Failed to get sync queue:', error);
+      return [];
+    }
+  }
+
+  // Save sync queue
+  saveSyncQueue(queue) {
+    try {
+      localStorage.setItem(this.getStorageKey('syncQueue'), JSON.stringify(queue));
+      this.syncQueue = queue;
+    } catch (error) {
+      console.warn('Failed to save sync queue:', error);
+    }
+  }
+
+  // Process sync queue
+  async processSyncQueue() {
+    if (!this.isOnlineNow()) return;
+
+    const queue = this.getSyncQueue();
+    if (queue.length === 0) return;
+
+    console.log(`Processing ${queue.length} queued actions...`);
+
+    const failedItems = [];
+    
+    for (const item of queue) {
+      try {
+        await this.processQueueItem(item);
+        console.log('Synced:', item.action.type, item.action.data?.title || item.action.data?.id);
+      } catch (error) {
+        console.warn('Failed to sync item:', error);
+        item.attempts = (item.attempts || 0) + 1;
+        
+        // Keep trying for up to 3 attempts
+        if (item.attempts < 3) {
+          failedItems.push(item);
+        } else {
+          console.error('Giving up on sync item after 3 attempts:', item);
+        }
+      }
+    }
+
+    // Update queue with only failed items
+    this.saveSyncQueue(failedItems);
+    
+    if (failedItems.length === 0) {
+      localStorage.setItem(this.getStorageKey('lastSync'), new Date().toISOString());
+    }
+  }
+
+  // Process individual queue item
+  async processQueueItem(item) {
+    const { action } = item;
+    
+    // Dynamically import entities to avoid circular dependencies
+    const { Reminder } = await import('../../entities/Reminder');
+    const { User } = await import('../../entities/User');
+    
+    switch (action.type) {
+      case 'CREATE_REMINDER':
+        await Reminder.create(action.data);
+        break;
+        
+      case 'UPDATE_REMINDER':
+        await Reminder.update(action.reminderId, action.data);
+        break;
+        
+      case 'DELETE_REMINDER':
+        await Reminder.delete(action.reminderId);
+        break;
+        
+      case 'UPDATE_USER':
+        await User.updateMyUserData(action.data);
+        break;
+        
+      default:
+        throw new Error(`Unknown action type: ${action.type}`);
+    }
+  }
+
+  // Create reminder (offline-capable)
+  async createReminder(reminderData) {
+    const reminder = {
+      ...reminderData,
+      id: 'temp_' + Date.now(), // Temporary ID for offline
+      created_date: new Date().toISOString(),
+      updated_date: new Date().toISOString()
+    };
+
+    // Add to local cache immediately
+    const cachedReminders = this.getCachedReminders();
+    cachedReminders.unshift(reminder);
+    this.cacheReminders(cachedReminders);
+
+    // Add to sync queue
+    this.addToSyncQueue({
+      type: 'CREATE_REMINDER',
+      data: reminderData
+    });
+
+    return reminder;
+  }
+
+  // Update reminder (offline-capable)
+  async updateReminder(reminderId, updateData) {
+    // Update in local cache
+    const cachedReminders = this.getCachedReminders();
+    const reminderIndex = cachedReminders.findIndex(r => r.id === reminderId);
+    
+    if (reminderIndex !== -1) {
+      cachedReminders[reminderIndex] = {
+        ...cachedReminders[reminderIndex],
+        ...updateData,
+        updated_date: new Date().toISOString()
+      };
+      this.cacheReminders(cachedReminders);
+    }
+
+    // Add to sync queue
+    this.addToSyncQueue({
+      type: 'UPDATE_REMINDER',
+      reminderId,
+      data: updateData
+    });
+
+    return cachedReminders[reminderIndex];
+  }
+
+  // Delete reminder (offline-capable)
+  async deleteReminder(reminderId) {
+    // Remove from local cache
+    const cachedReminders = this.getCachedReminders();
+    const filteredReminders = cachedReminders.filter(r => r.id !== reminderId);
+    this.cacheReminders(filteredReminders);
+
+    // Add to sync queue
+    this.addToSyncQueue({
+      type: 'DELETE_REMINDER',
+      reminderId
+    });
+  }
+
+  // Get pending sync count
+  getPendingSyncCount() {
+    return this.getSyncQueue().length;
+  }
+
+  // Get last sync time
+  getLastSyncTime() {
+    return localStorage.getItem(this.getStorageKey('lastSync'));
+  }
+}
+
+// Create singleton instance
+const offlineStorage = new OfflineStorageManager();
+export default offlineStorage;

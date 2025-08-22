@@ -1,0 +1,93 @@
+import React, { useState, useRef, useCallback } from 'react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { MapPin, Search, Loader2 } from 'lucide-react';
+import { debounce } from 'lodash';
+
+// A simple mock search function. In a real app, this would call a Geocoding API like Google Maps or OpenStreetMap.
+const fakeGeocodeSearch = async (query) => {
+    console.log(`Searching for: ${query}`);
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Return mock data based on common queries
+    if (query.toLowerCase().includes('home')) {
+        return [{ place_id: 1, display_name: "Home (123 Main St, Anytown)", lat: 40.7128, lon: -74.0060 }];
+    }
+    if (query.toLowerCase().includes('work')) {
+        return [{ place_id: 2, display_name: "Work (456 Business Ave, Anytown)", lat: 40.7580, lon: -73.9855 }];
+    }
+    if (query.toLowerCase().includes('grocery')) {
+        return [{ place_id: 3, display_name: "SuperMart Grocery", lat: 34.0522, lon: -118.2437 }];
+    }
+    return [
+      { place_id: 99, display_name: `${query} (Example Location)`, lat: 37.7749, lon: -122.4194 }
+    ];
+};
+
+export default function LocationInput({ value, onChange }) {
+    const [searchTerm, setSearchTerm] = useState(value ? value.split('|')[0] : '');
+    const [suggestions, setSuggestions] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [selectedLocation, setSelectedLocation] = useState(value || null);
+    
+    const debouncedSearch = useCallback(debounce(async (query) => {
+        if (query.length < 3) {
+            setSuggestions([]);
+            return;
+        }
+        setIsLoading(true);
+        const results = await fakeGeocodeSearch(query);
+        setSuggestions(results);
+        setIsLoading(false);
+    }, 500), []);
+
+    const handleInputChange = (e) => {
+        const query = e.target.value;
+        setSearchTerm(query);
+        setSelectedLocation(null);
+        onChange("");
+        debouncedSearch(query);
+    };
+
+    const handleSelectSuggestion = (location) => {
+        const locationString = `${location.display_name}|${location.lat}|${location.lon}`;
+        setSelectedLocation(locationString);
+        setSearchTerm(location.display_name);
+        onChange(locationString);
+        setSuggestions([]);
+    };
+
+    return (
+        <div className="relative mt-2">
+            <div className="flex items-center">
+                <Input
+                    id="location"
+                    value={searchTerm}
+                    onChange={handleInputChange}
+                    placeholder="Search for an address or place..."
+                    className="h-12"
+                    autoComplete="off"
+                />
+                {isLoading && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 animate-spin text-slate-400" />}
+            </div>
+
+            {suggestions.length > 0 && (
+                <ul className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-md shadow-lg">
+                    {suggestions.map((suggestion) => (
+                        <li key={suggestion.place_id}>
+                            <button
+                                type="button"
+                                className="w-full text-left px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-3"
+                                onClick={() => handleSelectSuggestion(suggestion)}
+                            >
+                                <MapPin className="w-4 h-4 text-slate-500" />
+                                {suggestion.display_name}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}

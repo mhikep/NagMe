@@ -1,0 +1,148 @@
+import React, { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  FileText, 
+  Code, 
+  CheckSquare, 
+  Database,
+  ArrowRight,
+  Download,
+  ExternalLink
+} from "lucide-react";
+
+import TransitionGuide from "../components/documentation/TransitionGuide";
+import ComponentMapping from "../components/documentation/ComponentMapping";
+import BusinessLogic from "../components/documentation/BusinessLogic";
+import WebVersionChecklist from "../components/documentation/WebVersionChecklist";
+
+export default function Documentation() {
+  const [activeTab, setActiveTab] = useState("guide");
+
+  const docs = [
+    {
+      id: "guide",
+      title: "React Native Transition Guide",
+      description: "Complete step-by-step guide for migrating NagMe to React Native",
+      icon: <FileText className="w-5 h-5" />,
+      component: <TransitionGuide />
+    },
+    {
+      id: "mapping", 
+      title: "Component Mapping",
+      description: "Detailed mapping of web components to React Native equivalents",
+      icon: <Code className="w-5 h-5" />,
+      component: <ComponentMapping />
+    },
+    {
+      id: "logic",
+      title: "Business Logic Extraction", 
+      description: "Identify reusable business logic (70-80% of codebase)",
+      icon: <Database className="w-5 h-5" />,
+      component: <BusinessLogic />
+    },
+    {
+      id: "checklist",
+      title: "Web Version Checklist",
+      description: "Perfect the current web version before migration",
+      icon: <CheckSquare className="w-5 h-5" />,
+      component: <WebVersionChecklist />
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-slate-900 mb-4">
+            NagMe Migration Documentation
+          </h1>
+          <p className="text-xl text-slate-600 mb-6">
+            Complete transition package for moving NagMe from web PWA to native React Native app with full background notifications.
+          </p>
+          
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6 rounded-xl">
+            <div className="flex items-center gap-3 mb-3">
+              <ArrowRight className="w-6 h-6" />
+              <h3 className="text-lg font-semibold">Why React Native?</h3>
+            </div>
+            <p className="opacity-90">
+              iOS PWAs cannot send background notifications when the app is closed. For NagMe's core value proposition 
+              of reliable, worry-free reminders, native push notifications are essential.
+            </p>
+          </div>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4 mb-8">
+            {docs.map(doc => (
+              <TabsTrigger key={doc.id} value={doc.id} className="flex items-center gap-2">
+                {doc.icon}
+                <span className="hidden sm:inline">{doc.title.split(' ')[0]}</span>
+                <span className="sm:hidden">{doc.title.split(' ')[0].slice(0, 4)}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+            {docs.map(doc => (
+              <Card 
+                key={doc.id}
+                className={`cursor-pointer transition-all duration-200 hover:shadow-lg ${
+                  activeTab === doc.id 
+                    ? 'ring-2 ring-blue-500 bg-blue-50' 
+                    : 'hover:bg-slate-50'
+                }`}
+                onClick={() => setActiveTab(doc.id)}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${
+                      activeTab === doc.id ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {doc.icon}
+                    </div>
+                    <CardTitle className="text-base">{doc.title}</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-600">{doc.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {docs.map(doc => (
+            <TabsContent key={doc.id} value={doc.id}>
+              <Card className="min-h-screen">
+                <CardContent className="p-0">
+                  {doc.component}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          ))}
+        </Tabs>
+
+        <div className="mt-12 bg-slate-800 text-white p-8 rounded-xl">
+          <h3 className="text-xl font-semibold mb-4">Ready to Begin?</h3>
+          <p className="text-slate-300 mb-6">
+            This documentation package provides everything needed for a successful transition. 
+            The web version serves as a perfect blueprint with 70-80% of the business logic directly reusable.
+          </p>
+          
+          <div className="flex flex-wrap gap-4">
+            <Button variant="secondary" className="flex items-center gap-2">
+              <ExternalLink className="w-4 h-4" />
+              React Native Docs
+            </Button>
+            <Button variant="outline" className="flex items-center gap-2 text-slate-300 border-slate-600 hover:bg-slate-700">
+              <Download className="w-4 h-4" />
+              Export Documentation
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

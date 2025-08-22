@@ -1,0 +1,72 @@
+import React from "react";
+import { Card } from "@/components/ui/card";
+import { 
+  Clock, 
+  CheckCircle2, 
+  AlertTriangle, 
+  BarChart3 
+} from "lucide-react";
+import { motion } from "framer-motion";
+
+const StatCard = ({ title, value, icon: Icon, color, gradient, delay }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay }}
+  >
+    <Card className="p-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:shadow-lg transition-all duration-300">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+            {title}
+          </p>
+          <p className="text-3xl font-bold text-slate-900 dark:text-white">
+            {value}
+          </p>
+        </div>
+        <div className={`p-3 rounded-xl ${gradient}`}>
+          <Icon className={`w-6 h-6 ${color}`} />
+        </div>
+      </div>
+    </Card>
+  </motion.div>
+);
+
+export default function QuickStats({ stats }) {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <StatCard
+        title="Total"
+        value={stats.total}
+        icon={BarChart3}
+        color="text-blue-600 dark:text-blue-400"
+        gradient="bg-blue-100 dark:bg-blue-900/30"
+        delay={0}
+      />
+      <StatCard
+        title="Pending"
+        value={stats.pending}
+        icon={Clock}
+        color="text-amber-600 dark:text-amber-400"
+        gradient="bg-amber-100 dark:bg-amber-900/30"
+        delay={0.1}
+      />
+      <StatCard
+        title="Completed"
+        value={stats.completed}
+        icon={CheckCircle2}
+        color="text-green-600 dark:text-green-400"
+        gradient="bg-green-100 dark:bg-green-900/30"
+        delay={0.2}
+      />
+      <StatCard
+        title="Overdue"
+        value={stats.overdue}
+        icon={AlertTriangle}
+        color="text-red-600 dark:text-red-400"
+        gradient="bg-red-100 dark:bg-red-900/30"
+        delay={0.3}
+      />
+    </div>
+  );
+}

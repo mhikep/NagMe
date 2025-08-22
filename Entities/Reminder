@@ -1,0 +1,152 @@
+{
+  "name": "Reminder",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "The reminder title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the reminder"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the reminder is due"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "default": "medium",
+      "description": "Priority level"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "work",
+        "personal",
+        "health",
+        "shopping",
+        "family",
+        "finance",
+        "travel",
+        "education",
+        "other"
+      ],
+      "default": "personal",
+      "description": "Reminder category"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "completed"
+      ],
+      "default": "pending",
+      "description": "Current status"
+    },
+    "nagging_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether persistent nagging is enabled"
+    },
+    "nagging_intensity": {
+      "type": "string",
+      "enum": [
+        "gentle",
+        "normal",
+        "aggressive",
+        "relentless"
+      ],
+      "default": "normal",
+      "description": "How intense the nagging should be"
+    },
+    "location": {
+      "type": "string",
+      "description": "Location-based trigger"
+    },
+    "recurrence": {
+      "type": "string",
+      "enum": [
+        "none",
+        "daily",
+        "weekly",
+        "monthly",
+        "yearly",
+        "weekdays",
+        "weekends",
+        "custom"
+      ],
+      "default": "none",
+      "description": "Recurrence pattern"
+    },
+    "recurrence_custom": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "days",
+            "weeks",
+            "months"
+          ]
+        },
+        "interval": {
+          "type": "number"
+        },
+        "days_of_week": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "end_date": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "description": "Custom recurrence pattern details"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags for organization"
+    },
+    "snooze_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of times snoozed"
+    },
+    "subtasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "completed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "description": "List of subtasks for the reminder"
+    },
+    "delegated_to_email": {
+      "type": "string",
+      "description": "The email of the user this reminder is delegated to."
+    }
+  },
+  "required": [
+    "title",
+    "due_date"
+  ]
+}

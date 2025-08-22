@@ -1,0 +1,205 @@
+import React from "react";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Calendar as CalendarIcon, Repeat } from "lucide-react";
+import { format } from "date-fns";
+
+const WEEKDAYS = [
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" }
+];
+
+export default function RecurrenceSelector({ value, customValue, onChange, onCustomChange }) {
+  const handleCustomIntervalChange = (field, newValue) => {
+    onCustomChange({
+      ...customValue,
+      [field]: newValue
+    });
+  };
+
+  const handleWeekdayToggle = (dayValue, checked) => {
+    const currentDays = customValue.days_of_week || [];
+    const updatedDays = checked 
+      ? [...currentDays, dayValue].sort()
+      : currentDays.filter(day => day !== dayValue);
+    
+    handleCustomIntervalChange('days_of_week', updatedDays);
+  };
+
+  return (
+    <div>
+      <Label htmlFor="recurrence" className="text-base font-medium flex items-center gap-2">
+        <Repeat className="w-4 h-4" />
+        Recurrence Pattern
+      </Label>
+      <Select
+        value={value}
+        onValueChange={onChange}
+      >
+        <SelectTrigger className="mt-2 h-12">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">No Recurrence</SelectItem>
+          <SelectItem value="daily">Daily</SelectItem>
+          <SelectItem value="weekly">Weekly</SelectItem>
+          <SelectItem value="monthly">Monthly</SelectItem>
+          <SelectItem value="yearly">Yearly</SelectItem>
+          <SelectItem value="weekdays">Weekdays Only (Mon-Fri)</SelectItem>
+          <SelectItem value="weekends">Weekends Only (Sat-Sun)</SelectItem>
+          <SelectItem value="custom">Custom Interval</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {/* Custom Recurrence Settings */}
+      {value === "custom" && (
+        <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
+          <h4 className="font-medium text-slate-900 dark:text-white mb-4">Custom Recurrence</h4>
+          
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <Label htmlFor="interval" className="text-sm font-medium">
+                Repeat Every
+              </Label>
+              <Input
+                id="interval"
+                type="number"
+                min="1"
+                max="365"
+                value={customValue.interval || 1}
+                onChange={(e) => handleCustomIntervalChange('interval', parseInt(e.target.value) || 1)}
+                className="mt-2"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="type" className="text-sm font-medium">
+                Time Period
+              </Label>
+              <Select
+                value={customValue.type || "days"}
+                onValueChange={(value) => handleCustomIntervalChange('type', value)}
+              >
+                <SelectTrigger className="mt-2">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="days">Day(s)</SelectItem>
+                  <SelectItem value="weeks">Week(s)</SelectItem>
+                  <SelectItem value="months">Month(s)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Days of Week Selection for Weekly Recurrence */}
+          {customValue.type === "weeks" && (
+            <div className="mb-4">
+              <Label className="text-sm font-medium mb-2 block">
+                Repeat On (Select Days)
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {WEEKDAYS.map(({ value: dayValue, label }) => (
+                  <div key={dayValue} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`day-${dayValue}`}
+                      checked={(customValue.days_of_week || []).includes(dayValue)}
+                      onCheckedChange={(checked) => handleWeekdayToggle(dayValue, checked)}
+                    />
+                    <Label 
+                      htmlFor={`day-${dayValue}`}
+                      className="text-sm cursor-pointer"
+                    >
+                      {label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                Leave empty to repeat on the same day of the week as the original reminder
+              </p>
+            </div>
+          )}
+
+          {/* End Date */}
+          <div>
+            <Label className="text-sm font-medium">
+              End Date (Optional)
+            </Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="mt-2 w-full justify-start text-left font-normal"
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {customValue.end_date ? format(new Date(customValue.end_date), "PPP") : "No end date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={customValue.end_date ? new Date(customValue.end_date) : undefined}
+                  onSelect={(date) => handleCustomIntervalChange('end_date', date ? date.toISOString().split('T')[0] : "")}
+                  disabled={(date) => date < new Date()}
+                />
+                <div className="p-3 border-t">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCustomIntervalChange('end_date', "")}
+                    className="w-full"
+                  >
+                    Clear End Date
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Preview */}
+          <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              <strong>Preview:</strong> {getRecurrencePreview(customValue)}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getRecurrencePreview(customValue) {
+  if (!customValue.interval || !customValue.type) {
+    return "Set interval and type above";
+  }
+
+  const interval = customValue.interval;
+  const type = customValue.type;
+  const plural = interval > 1 ? "s" : "";
+  
+  let preview = `Every ${interval} ${type.slice(0, -1)}${plural}`;
+  
+  if (type === "weeks" && customValue.days_of_week && customValue.days_of_week.length > 0) {
+    const dayNames = customValue.days_of_week.map(day => 
+      WEEKDAYS.find(wd => wd.value === day)?.label
+    ).join(", ");
+    preview += ` on ${dayNames}`;
+  }
+  
+  if (customValue.end_date) {
+    preview += ` until ${format(new Date(customValue.end_date), "MMM d, yyyy")}`;
+  }
+  
+  return preview;
+}

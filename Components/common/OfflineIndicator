@@ -1,0 +1,126 @@
+import React, { useState, useEffect } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { 
+  Wifi, 
+  WifiOff, 
+  RefreshCw, 
+  Clock,
+  CheckCircle2 
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import offlineStorage from "../utils/offlineStorage";
+
+export default function OfflineIndicator() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingSync, setPendingSync] = useState(0);
+  const [lastSync, setLastSync] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  useEffect(() => {
+    // Update pending sync count
+    updateSyncStatus();
+
+    // Listen for connection changes
+    const handleConnectionChange = (event) => {
+      setIsOnline(event.detail.isOnline);
+      updateSyncStatus();
+    };
+
+    // Listen for sync queue changes
+    const handleStorageChange = (event) => {
+      if (event.key === 'nagme-sync-queue') {
+        updateSyncStatus();
+      }
+    };
+
+    window.addEventListener('nagme-connection-change', handleConnectionChange);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('nagme-connection-change', handleConnectionChange);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  const updateSyncStatus = () => {
+    setPendingSync(offlineStorage.getPendingSyncCount());
+    setLastSync(offlineStorage.getLastSyncTime());
+  };
+
+  const handleManualSync = async () => {
+    if (!isOnline) return;
+    
+    setIsSyncing(true);
+    try {
+      await offlineStorage.processSyncQueue();
+      updateSyncStatus();
+    } catch (error) {
+      console.error('Manual sync failed:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      {/* Online/Offline Status */}
+      <Badge 
+        variant={isOnline ? "secondary" : "destructive"}
+        className={`flex items-center gap-1 ${
+          isOnline 
+            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" 
+            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
+        }`}
+      >
+        {isOnline ? (
+          <Wifi className="w-3 h-3" />
+        ) : (
+          <WifiOff className="w-3 h-3" />
+        )}
+        {isOnline ? "Online" : "Offline"}
+      </Badge>
+
+      {/* Pending Sync Indicator */}
+      <AnimatePresence>
+        {pendingSync > 0 && (
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            className="flex items-center gap-2"
+          >
+            <Badge variant="outline" className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {pendingSync} pending
+            </Badge>
+            
+            {isOnline && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="h-6 px-2 text-xs"
+              >
+                {isSyncing ? (
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3 h-3" />
+                )}
+              </Button>
+            )}
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Last Sync Time */}
+      {lastSync && pendingSync === 0 && (
+        <Badge variant="outline" className="flex items-center gap-1 text-xs">
+          <CheckCircle2 className="w-3 h-3 text-green-600" />
+          Synced
+        </Badge>
+      )}
+    </div>
+  );
+}

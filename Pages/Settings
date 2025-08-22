@@ -1,0 +1,771 @@
+import React, { useState, useEffect } from "react";
+import { User } from "@/entities/User";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Reminder } from "@/entities/Reminder";
+import { TeamConnection } from "@/entities/TeamConnection";
+import offlineStorage from "../components/utils/offlineStorage"; // Fixed import path
+import {
+  Bell,
+  Moon,
+  Volume2,
+  Smartphone,
+  Clock,
+  Shield,
+  Download,
+  Trash2,
+  Settings as SettingsIcon,
+  Coffee,
+  CheckCircle2,
+  AlertTriangle,
+  RotateCw,
+} from "lucide-react";
+import TeamMembers from "../components/settings/TeamMembers";
+
+const timeOptions = Array.from({ length: 48 }, (_, i) => {
+    const hours = Math.floor(i / 2);
+    const minutes = i % 2 === 0 ? '00' : '30';
+    const hoursPadded = hours.toString().padStart(2, '0');
+    const value = `${hoursPadded}:${minutes}`;
+    
+    const ampmHours = hours % 12 === 0 ? 12 : hours % 12;
+    const ampm = hours < 12 || hours === 24 ? 'AM' : 'PM';
+    const label = `${ampmHours}:${minutes} ${ampm}`;
+    
+    return { value, label };
+});
+
+export default function Settings() {
+  const [settings, setSettings] = useState({
+    naggingEnabled: true,
+    naggingInterval: "5",
+    soundEnabled: true,
+    vibrationEnabled: true,
+    darkMode: false,
+    notificationTime: "09:00",
+    locationReminders: true,
+    persistentNotifications: true,
+    reminderSound: "default",
+    snoozeInterval: "10"
+  });
+  const [userData, setUserData] = useState({
+    quiet_hours_enabled: false,
+    quiet_hours_start: "22:00",
+    quiet_hours_end: "07:00",
+  });
+  const [notificationPermission, setNotificationPermission] = useState("default");
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isDeletingCompleted, setIsDeletingCompleted] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    // Sync with the current theme state from localStorage
+    const savedTheme = localStorage.getItem('nagme-theme');
+    if (savedTheme === 'dark') {
+      setSettings(prev => ({...prev, darkMode: true}));
+      document.documentElement.classList.add('dark');
+    } else {
+      setSettings(prev => ({...prev, darkMode: false}));
+      document.documentElement.classList.remove('dark');
+    }
+
+    // Load default notification time from localStorage
+    const savedNotificationTime = localStorage.getItem('nagme-default-notification-time') || '09:00';
+    setSettings(prev => ({...prev, notificationTime: savedNotificationTime}));
+
+    // Load nagging interval from localStorage
+    const savedNaggingInterval = localStorage.getItem('nagme-nagging-interval') || '5';
+    setSettings(prev => ({...prev, naggingInterval: savedNaggingInterval}));
+
+    // Load default snooze interval from localStorage
+    const savedSnoozeInterval = localStorage.getItem('nagme-snooze-interval') || '10';
+    setSettings(prev => ({...prev, snoozeInterval: savedSnoozeInterval}));
+
+    if ("Notification" in window) {
+      setNotificationPermission(Notification.permission);
+    }
+
+    loadData(); 
+  }, []);
+
+  const loadData = async () => {
+    try {
+      let userData;
+      
+      if (navigator.onLine) {
+        try {
+          userData = await User.me();
+          offlineStorage.cacheUser(userData);
+        } catch (error) {
+          console.warn("Failed to load user data online, using cache:", error);
+          userData = offlineStorage.getCachedUser();
+        }
+      } else {
+        userData = offlineStorage.getCachedUser();
+      }
+      
+      if (userData) {
+        setCurrentUser(userData);
+        setUserData({
+          quiet_hours_enabled: userData.quiet_hours_enabled || false,
+          quiet_hours_start: userData.quiet_hours_start || "22:00",
+          quiet_hours_end: userData.quiet_hours_end || "07:00",
+        });
+        setError(null);
+      } else {
+        throw new Error("No user data available");
+      }
+    } catch (err) {
+      console.error("Failed to load user data", err);
+      setError(err);
+    }
+  };
+
+  const handleRequestNotificationPermission = () => {
+    if (!("Notification" in window)) {
+      alert("This browser does not support desktop notifications.");
+      return;
+    }
+
+    if (Notification.permission === "granted") {
+      alert("Notifications are already enabled!");
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then(permission => {
+        setNotificationPermission(permission);
+        if (permission === "granted") {
+          new Notification("NagMe Notifications Enabled!", {
+            body: "You'll now receive alerts for your reminders."
+          });
+        }
+      });
+    } else {
+      alert(`Notification permission was denied. To enable notifications:
+
+Chrome: Click the lock icon (🔒) in the address bar → Set "Notifications" to "Allow"
+Firefox: Click the shield/lock icon → Permissions → Notifications → Allow  
+Safari: Safari menu → Preferences → Websites → Notifications → Allow
+
+Then refresh this page and try again.`);
+    }
+  };
+
+  const handleSettingChange = (key, value) => {
+    setSettings(prev => ({
+      ...prev,
+      [key]: value
+    }));
+
+    if (key === 'notificationTime') {
+      localStorage.setItem('nagme-default-notification-time', value);
+    }
+
+    if (key === 'naggingInterval') {
+      localStorage.setItem('nagme-nagging-interval', value);
+    }
+
+    if (key === 'snoozeInterval') {
+      localStorage.setItem('nagme-snooze-interval', value);
+    }
+
+    if (key === 'darkMode') {
+      if (value) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('nagme-theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('nagme-theme', 'light');
+      }
+      
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'nagme-theme',
+        newValue: value ? 'dark' : 'light',
+        oldValue: value ? 'light' : 'dark'
+      }));
+    }
+  };
+
+  const handleUserSettingChange = async (key, value) => {
+    setUserData(prev => ({...prev, [key]: value}));
+    
+    try {
+      if (navigator.onLine) {
+        try {
+          await User.updateMyUserData({ [key]: value });
+        } catch (error) {
+          console.warn("Online user update failed, queuing for later sync:", error);
+          offlineStorage.addToSyncQueue({
+            type: 'UPDATE_USER',
+            data: { [key]: value }
+          });
+        }
+      } else {
+        offlineStorage.addToSyncQueue({
+          type: 'UPDATE_USER',
+          data: { [key]: value }
+        });
+      }
+    } catch (error) {
+      console.error("Failed to update user setting:", error);
+    }
+  };
+
+  const clearCompletedReminders = async () => {
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete all completed reminders? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    setIsDeletingCompleted(true);
+    try {
+      const allReminders = await Reminder.list();
+      const userEmail = currentUser?.email?.toLowerCase();
+      
+      const completedRemindersToDelete = allReminders.filter(r => 
+        r.status === "completed" && 
+        (r.created_by?.toLowerCase() === userEmail || r.delegated_to_email?.toLowerCase() === userEmail)
+      );
+
+      if (completedRemindersToDelete.length === 0) {
+        alert("No completed reminders found to delete.");
+        setIsDeletingCompleted(false);
+        return;
+      }
+
+      const deletePromises = completedRemindersToDelete.map(reminder => 
+        Reminder.delete(reminder.id)
+      );
+      
+      await Promise.all(deletePromises);
+      
+      alert(`Successfully deleted ${completedRemindersToDelete.length} completed reminder${completedRemindersToDelete.length !== 1 ? 's' : ''}.`);
+      
+      localStorage.setItem('reminders-updated', Date.now());
+      
+    } catch (error) {
+      console.error("Error deleting completed reminders:", error);
+      alert("Failed to delete completed reminders. Please try again.");
+    } finally {
+      setIsDeletingCompleted(false);
+    }
+  };
+
+  const exportAllData = async () => {
+    const confirmed = window.confirm(
+      "This will export all reminders, team connections, and your user data to a JSON file. Do you want to continue?"
+    );
+    if (!confirmed) return;
+
+    setIsExporting(true);
+    try {
+      const reminders = await Reminder.list();
+      const teamConnections = await TeamConnection.list();
+      const users = await User.list();
+
+      const exportData = {
+        version: "1.0.0",
+        export_date: new Date().toISOString(),
+        data: {
+          reminders,
+          teamConnections,
+          users: users.filter(user => user.email === currentUser.email),
+        },
+      };
+
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const date = new Date().toISOString().split('T')[0];
+      link.download = `nagme-data-export-${date}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      alert("Data export successful!");
+
+    } catch (error) {
+      console.error("Error exporting data:", error);
+      alert("Failed to export data. Please check the console for errors.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const clearAllData = async () => {
+    const confirmed = window.confirm(
+      "⚠️ WARNING: This will permanently delete ALL your reminders (both pending and completed). This action cannot be undone.\n\nAre you absolutely sure you want to continue?"
+    );
+    if (!confirmed) return;
+
+    const doubleConfirmed = window.confirm(
+      "This is your final warning. All your reminder data will be lost forever.\n\nType 'DELETE' and click OK to confirm."
+    );
+    if (!doubleConfirmed) return;
+
+    setIsDeletingAll(true);
+    try {
+      const allReminders = await Reminder.list();
+      const userEmail = currentUser?.email?.toLowerCase();
+      
+      const allUserReminders = allReminders.filter(r => 
+        r.created_by?.toLowerCase() === userEmail || r.delegated_to_email?.toLowerCase() === userEmail
+      );
+
+      if (allUserReminders.length === 0) {
+        alert("No reminders found to delete.");
+        setIsDeletingAll(false);
+        return;
+      }
+
+      const deletePromises = allUserReminders.map(reminder => 
+        Reminder.delete(reminder.id)
+      );
+      
+      await Promise.all(deletePromises);
+      
+      alert(`Successfully deleted all ${allUserReminders.length} reminder${allUserReminders.length !== 1 ? 's' : ''}.`);
+      
+      localStorage.setItem('reminders-updated', Date.now());
+      
+    } catch (error) {
+      console.error("Error deleting all reminders:", error);
+      alert("Failed to delete reminders. Please try again.");
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="p-6 lg:p-8 flex items-center justify-center min-h-[calc(100vh-100px)]">
+        <Card className="p-8 text-center max-w-lg w-full shadow-2xl">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Could not load settings</h2>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">
+            We couldn't load your user data. Please check your connection and try again.
+          </p>
+          <p className="text-sm text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-900/20 p-3 rounded-md mb-6 break-words">
+            <strong>Error:</strong> {error.message}
+          </p>
+          <Button onClick={() => window.location.reload()}>
+            <RotateCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="p-6 lg:p-8 flex items-center justify-center min-h-[calc(100vh-100px)]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600 dark:text-slate-300">Loading user settings...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 lg:p-8">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
+            Settings
+          </h1>
+          <p className="text-slate-600 dark:text-slate-300">
+            Customize your NagMe experience
+          </p>
+          {currentUser && (
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Logged in as: <span className="font-medium">{currentUser.email}</span>
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          {/* Nagging Settings */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <Bell className="w-5 h-5 text-amber-500" />
+              Nagging Reminders
+            </h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-medium">Enable Nagging</Label>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Show persistent alerts until reminders are completed
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.naggingEnabled}
+                  onCheckedChange={(checked) => handleSettingChange("naggingEnabled", checked)}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Nagging Interval</Label>
+                  <Select
+                    value={settings.naggingInterval}
+                    onValueChange={(value) => handleSettingChange("naggingInterval", value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Every 1 minute</SelectItem>
+                      <SelectItem value="5">Every 5 minutes</SelectItem>
+                      <SelectItem value="10">Every 10 minutes</SelectItem>
+                      <SelectItem value="30">Every 30 minutes</SelectItem>
+                      <SelectItem value="60">Every hour</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                    This sets how often an overdue reminder will alert you. <strong>Snoozing a reminder will temporarily pause this interval.</strong>
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Default Snooze</Label>
+                  <Select
+                    value={settings.snoozeInterval}
+                    onValueChange={(value) => handleSettingChange("snoozeInterval", value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 minutes</SelectItem>
+                      <SelectItem value="10">10 minutes</SelectItem>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                      <SelectItem value="60">1 hour</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Smart Timing */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <Coffee className="w-5 h-5 text-teal-500" />
+              Smart Timing (Quiet Hours)
+            </h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-medium">Enable Quiet Hours</Label>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Pause all nagging alerts during a specific time.
+                  </p>
+                </div>
+                <Switch
+                  checked={userData.quiet_hours_enabled}
+                  onCheckedChange={(checked) => handleUserSettingChange("quiet_hours_enabled", checked)}
+                />
+              </div>
+
+              {userData.quiet_hours_enabled && (
+                <div className="grid md:grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <Label className="text-sm font-medium">Start Time</Label>
+                    <Select
+                      value={userData.quiet_hours_start}
+                      onValueChange={(value) => handleUserSettingChange("quiet_hours_start", value)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {timeOptions.map(option => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">End Time</Label>
+                    <Select
+                      value={userData.quiet_hours_end}
+                      onValueChange={(value) => handleUserSettingChange("quiet_hours_end", value)}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {timeOptions.map(option => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Notification Settings */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <Smartphone className="w-5 h-5 text-blue-500" />
+              Notifications
+            </h2>
+            <div className="space-y-4">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-medium text-slate-900 dark:text-white">
+                      Enable Browser Notifications
+                    </Label>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                      Get alerts even when the app is in the background.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleRequestNotificationPermission}
+                    disabled={notificationPermission === 'granted'}
+                  >
+                    {notificationPermission === 'granted' ? 'Enabled' : 'Enable'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-medium">Sound Notifications</Label>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Play sound when reminders are due
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.soundEnabled}
+                  onCheckedChange={(checked) => handleSettingChange("soundEnabled", checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-medium">Vibration</Label>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Vibrate device for reminder alerts
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.vibrationEnabled}
+                  onCheckedChange={(checked) => handleSettingChange("vibrationEnabled", checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-medium">Persistent Notifications</Label>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Keep notifications visible until dismissed
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.persistentNotifications}
+                  onCheckedChange={(checked) => handleSettingChange("persistentNotifications", checked)}
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Reminder Sound</Label>
+                  <Select
+                    value={settings.reminderSound}
+                    onValueChange={(value) => handleSettingChange("reminderSound", value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Default</SelectItem>
+                      <SelectItem value="chime">Chime</SelectItem>
+                      <SelectItem value="bell">Bell</SelectItem>
+                      <SelectItem value="alert">Alert</SelectItem>
+                      <SelectItem value="gentle">Gentle</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Default Notification Time</Label>
+                  <Select
+                    value={settings.notificationTime}
+                    onValueChange={(value) => handleSettingChange("notificationTime", value)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="07:00">7:00 AM</SelectItem>
+                      <SelectItem value="08:00">8:00 AM</SelectItem>
+                      <SelectItem value="09:00">9:00 AM</SelectItem>
+                      <SelectItem value="10:00">10:00 AM</SelectItem>
+                      <SelectItem value="18:00">6:00 PM</SelectItem>
+                      <SelectItem value="19:00">7:00 PM</SelectItem>
+                      <SelectItem value="20:00">8:00 PM</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Appearance Settings */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <Moon className="w-5 h-5 text-purple-500" />
+              Appearance
+            </h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-medium">Dark Mode</Label>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Use dark theme for comfortable evening use
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.darkMode}
+                  onCheckedChange={(checked) => handleSettingChange("darkMode", checked)}
+                />
+              </div>
+            </div>
+          </Card>
+
+          {/* Team Members */}
+          <TeamMembers currentUser={currentUser} />
+
+          {/* Privacy & Data */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-green-500" />
+              Privacy & Data
+            </h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-base font-medium">Location-based Reminders</Label>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Allow reminders based on your location
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.locationReminders}
+                  onCheckedChange={(checked) => handleSettingChange("locationReminders", checked)}
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-600">
+                <h3 className="font-medium text-slate-900 dark:text-white mb-3">Data Management</h3>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={exportAllData}
+                    disabled={isExporting}
+                    className="flex items-center gap-2"
+                  >
+                    {isExporting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-600" />
+                        Exporting...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" />
+                        Export All Data
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={clearCompletedReminders}
+                    disabled={isDeletingCompleted}
+                    className="flex items-center gap-2 text-orange-600 border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                  >
+                    {isDeletingCompleted ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        Clear Completed
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    variant="destructive"
+                    onClick={clearAllData}
+                    disabled={isDeletingAll}
+                    className="flex items-center gap-2"
+                  >
+                    {isDeletingAll ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                        Deleting All...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        Clear All Data
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  <strong>Export All Data:</strong> Downloads a full backup of all your app's data in a single JSON file.
+                  <br />
+                  <strong>Clear Completed:</strong> Removes only completed reminders you created or were delegated to you.
+                  <br />
+                  <strong>Clear All Data:</strong> Removes ALL your reminders (pending and completed).
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* About */}
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <SettingsIcon className="w-5 h-5 text-slate-500" />
+              About NagMe
+            </h2>
+            <div className="space-y-2 text-slate-600 dark:text-slate-300">
+              <p><strong>Version:</strong> 1.0.0</p>
+              <p><strong>Build:</strong> Premium Edition</p>
+              <p><strong>Features:</strong> Smart reminders, persistent nagging, analytics</p>
+              {currentUser && (
+                <p><strong>Account:</strong> {currentUser.email}</p>
+              )}
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">
+                NagMe - Never forget what matters most to you. The reminder app that actually works.
+              </p>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}

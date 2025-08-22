@@ -1,0 +1,220 @@
+import React from 'react';
+
+export default function BusinessLogic() {
+  return (
+    <div className="max-w-4xl mx-auto p-6 prose prose-lg">
+      <h1>Business Logic Extraction Guide</h1>
+      
+      <p>This document identifies and documents all the core business logic that can be directly reused in the React Native version with minimal or no modifications.</p>
+
+      <h2>Entity Layer (100% Reusable)</h2>
+      
+      <p>The entire entity layer represents pure business logic that is completely platform-agnostic. These files can be copied directly to React Native with only HTTP client adjustments.</p>
+
+      <h3>Reminder Entity</h3>
+      <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto"><code>{`// entities/Reminder.js - FULLY REUSABLE
+export const Reminder = {
+  // CRUD Operations - Direct port
+  async list(sort = '-created_date', limit = 100) {
+    const response = await fetch('/api/reminders?sort=' + sort + '&limit=' + limit);
+    return response.json();
+  },
+
+  async create(data) {
+    const response = await fetch('/api/reminders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return response.json();
+  },
+
+  async update(id, data) {
+    const response = await fetch(\`/api/reminders/\${id}\`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return response.json();
+  },
+
+  // ... other methods
+};`}</code></pre>
+
+      <h2>Data Processing Logic (95% Reusable)</h2>
+      
+      <h3>Date and Time Utilities</h3>
+      <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto"><code>{`// utils/dateUtils.js - FULLY REUSABLE
+import { format, isToday, isTomorrow, isPast, addMinutes } from 'date-fns';
+
+export const formatDueDate = (dueDate) => {
+  const date = new Date(dueDate);
+  if (isToday(date)) return "Today";
+  if (isTomorrow(date)) return "Tomorrow";
+  return format(date, "MMM d, yyyy");
+};
+
+export const isOverdue = (dueDate, status) => {
+  return isPast(new Date(dueDate)) && status === "pending";
+};
+
+export const calculateSnoozeTime = (currentDueDate, minutesToAdd) => {
+  return addMinutes(new Date(currentDueDate), minutesToAdd).toISOString();
+};`}</code></pre>
+
+      <h3>Reminder Processing Logic</h3>
+      <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto"><code>{`// utils/reminderUtils.js - FULLY REUSABLE
+export const priorityConfig = {
+  low: { color: "#dbeafe", textColor: "#1e40af", icon: "🔵", order: 1 },
+  medium: { color: "#fef3c7", textColor: "#92400e", icon: "🟡", order: 2 },
+  high: { color: "#fed7aa", textColor: "#c2410c", icon: "🟠", order: 3 },
+  critical: { color: "#fecaca", textColor: "#dc2626", icon: "🔴", order: 4 }
+};
+
+export const categoryConfig = {
+  work: { color: "#e0e7ff", textColor: "#3730a3", icon: "💼" },
+  personal: { color: "#f3e8ff", textColor: "#6b21a8", icon: "👤" },
+  health: { color: "#d1fae5", textColor: "#065f46", icon: "🏥" },
+  // ... more categories
+};
+
+export const filterReminders = (reminders, filters, searchTerm) => {
+  return reminders.filter(reminder => {
+    const matchesSearch = !searchTerm || 
+      reminder.title.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = filters.status === "all" ||
+      (filters.status === "overdue" && isOverdue(reminder.due_date, reminder.status));
+    
+    return matchesSearch && matchesStatus;
+  });
+};`}</code></pre>
+
+      <h2>Validation Logic (100% Reusable)</h2>
+      
+      <h3>Form Validation</h3>
+      <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto"><code>{`// utils/validation.js - FULLY REUSABLE
+export const validateReminder = (reminderData) => {
+  const errors = {};
+
+  // Required fields
+  if (!reminderData.title?.trim()) {
+    errors.title = "Title is required";
+  }
+
+  if (!reminderData.due_date) {
+    errors.due_date = "Due date is required";
+  }
+
+  // Validate priority
+  const validPriorities = ['low', 'medium', 'high', 'critical'];
+  if (!validPriorities.includes(reminderData.priority)) {
+    errors.priority = "Invalid priority level";
+  }
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors
+  };
+};`}</code></pre>
+
+      <h2>Nagging Logic (100% Reusable Core)</h2>
+      
+      <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto"><code>{`// utils/naggingLogic.js - FULLY REUSABLE (platform-specific notifications)
+export const identifyNaggingReminders = (reminders, userSettings) => {
+  // Skip nagging during quiet hours
+  if (isQuietTime(userSettings)) {
+    return [];
+  }
+
+  const now = new Date();
+  
+  return reminders.filter(reminder => {
+    // Only pending reminders with nagging enabled
+    if (reminder.status !== "pending" || !reminder.nagging_enabled) {
+      return false;
+    }
+
+    // Must be overdue
+    const dueDate = new Date(reminder.due_date);
+    if (dueDate > now) {
+      return false;
+    }
+
+    return true;
+  });
+};
+
+export const shouldShowNaggingAlert = (reminder, lastShown) => {
+  const now = Date.now();
+  const intensity = reminder.nagging_intensity || 'normal';
+  const config = intensityConfig[intensity];
+  
+  if (!lastShown) return true;
+  
+  return (now - lastShown) >= config.interval;
+};`}</code></pre>
+
+      <h2>Natural Language Processing Logic (100% Reusable)</h2>
+      
+      <pre className="bg-gray-100 p-4 rounded-lg overflow-x-auto"><code>{`// utils/nlpProcessor.js - FULLY REUSABLE
+import { InvokeLLM } from "@/integrations/Core";
+
+export const processNaturalLanguageReminder = async (input) => {
+  const response = await InvokeLLM({
+    prompt: \`Parse this reminder: "\${input}"\`,
+    response_json_schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        due_date: { type: "string" },
+        priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
+        category: { type: "string", enum: ["work", "personal", "health"] }
+      }
+    }
+  });
+
+  return response;
+};`}</code></pre>
+
+      <h2>Reusability Summary</h2>
+      
+      <div className="bg-green-50 p-6 rounded-lg">
+        <h3 className="text-green-800">100% Reusable Components</h3>
+        <ul className="text-green-700">
+          <li><strong>Entity Layer:</strong> All CRUD operations</li>
+          <li><strong>Date/Time Utilities:</strong> All formatting and calculation functions</li>
+          <li><strong>Validation Logic:</strong> All form and data validation</li>
+          <li><strong>Reminder Processing:</strong> Filtering, sorting, statistics</li>
+          <li><strong>Nagging Logic:</strong> Overdue detection and intensity calculations</li>
+          <li><strong>Natural Language Processing:</strong> LLM integration and parsing</li>
+        </ul>
+      </div>
+
+      <div className="bg-yellow-50 p-6 rounded-lg mt-4">
+        <h3 className="text-yellow-800">90-95% Reusable (Minor Adaptations)</h3>
+        <ul className="text-yellow-700">
+          <li><strong>Offline Storage:</strong> Core sync logic reusable, storage layer needs platform adapter</li>
+          <li><strong>HTTP Client:</strong> Same logic, different implementation</li>
+        </ul>
+      </div>
+
+      <div className="bg-red-50 p-6 rounded-lg mt-4">
+        <h3 className="text-red-800">Requires Complete Rewrite</h3>
+        <ul className="text-red-700">
+          <li><strong>UI Components:</strong> All visual components</li>
+          <li><strong>Navigation:</strong> Router vs React Navigation</li>
+          <li><strong>Notifications:</strong> Web Notifications vs Push Notifications</li>
+          <li><strong>Storage:</strong> localStorage vs AsyncStorage</li>
+        </ul>
+      </div>
+
+      <div className="bg-blue-50 p-6 rounded-lg mt-6">
+        <h3 className="text-blue-800 text-xl">Estimated Reusability: 70-80%</h3>
+        <p className="text-blue-700">
+          The majority of the complex business logic, data processing, and algorithmic components can be directly ported, significantly reducing development time for the React Native version.
+        </p>
+      </div>
+    </div>
+  );
+}
