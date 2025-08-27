@@ -1,0 +1,815 @@
+
+import React, { useState, useEffect, useRef } from "react";
+import { Reminder } from "@/entities/Reminder";
+import { User } from "@/entities/User";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Plus,
+  Search,
+  Filter,
+  Bell,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  Calendar,
+  Zap,
+  TrendingUp,
+  RotateCw,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+
+import QuickStats from "../components/dashboard/QuickStats";
+import ReminderCard from "../components/dashboard/ReminderCard";
+import FilterTabs from "../components/dashboard/FilterTabs";
+import NaggingAlert from "../components/dashboard/NaggingAlert";
+import offlineStorage from "../components/utils/offlineStorage"; // Corrected import path
+import OfflineIndicator from "../components/common/OfflineIndicator"; 
+
+export default function Dashboard() {
+  const [reminders, setReminders] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [isLoading, setIsLoading] = useState(true);
+  const [sortBy, setSortBy] = useState("newest");
+  const [naggingReminders, setNaggingReminders] = useState([]);
+  const [activeNotifications, setActiveNotifications] = useState(new Map());
+  const [userSettings, setUserSettings] = useState(null);
+  const [error, setError] = useState(null);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine); 
+
+  const remindersRef = useRef(reminders);
+  remindersRef.current = reminders;
+
+  // Step 1: Fetch user settings on component mount.
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const user = await User.me();
+        setUserSettings(user);
+        setError(null); // Clear any previous errors on successful load
+      } catch (err) {
+        console.error("Failed to load user settings:", err);
+        // Handle auth error by trying to log in
+        if (err.message?.includes('unauthorized') || err.message?.includes('not authenticated')) {
+          try {
+            await User.login();
+            // On successful login redirect, the page will reload, so no need to set user settings here directly.
+            // If the user doesn't get redirected, they will be stuck in a reload loop trying to log in.
+            // For now, let's assume login() triggers a full page reload or navigation.
+            window.location.reload(); // Simplest way to re-trigger User.me() after successful login attempt
+          } catch (loginError) {
+            console.error("Auto-login failed:", loginError);
+            setError(new Error("Authentication failed. Please refresh the page to try logging in again."));
+            setUserSettings({}); // Set to empty object to stop loading indicator
+          }
+          return;
+        }
+        // Handle other errors (like Network Error)
+        setError(err);
+        setUserSettings({}); // Set to empty object to stop loading indicator
+      }
+    };
+    fetchUserData();
+  }, []);
+
+  // Step 2: Load reminders & set up intervals ONLY after user settings are loaded.
+  // Modified useEffect for loading reminders with offline support
+  useEffect(() => {
+    // Don't run this effect until settings are fetched.
+    if (userSettings === null) {
+      return;
+    }
+
+    const loadAndCheckReminders = async () => {
+      try {
+        setIsLoading(true);
+        let data = [];
+        
+        if (navigator.onLine) {
+          // Try to load from server
+          try {
+            data = await Reminder.list("-created_date");
+            // Cache the data for offline use
+            offlineStorage.cacheReminders(data);
+            setError(null);
+          } catch (err) {
+            console.warn("Failed to load from server, using cached data:", err);
+            data = offlineStorage.getCachedReminders();
+            setError(new Error("Using offline data - will sync when connection is restored"));
+          }
+        } else {
+          // Load from cache when offline
+          data = offlineStorage.getCachedReminders();
+          setError(new Error("Offline mode - showing cached data"));
+        }
+        
+        const userEmail = userSettings?.email?.toLowerCase();
+        const visibleReminders = data.filter(r => {
+          const createdBy = r.created_by?.toLowerCase();
+          const delegatedTo = r.delegated_to_email?.toLowerCase();
+          return createdBy === userEmail || delegatedTo === userEmail;
+        });
+        
+        setReminders(visibleReminders);
+        checkNaggingReminders(visibleReminders);
+        checkLocationReminders(visibleReminders);
+      } catch (err) {
+        console.error("Error loading reminders:", err);
+        setError(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Listen for connection changes
+    const handleConnectionChange = (event) => {
+      setIsOffline(!event.detail.isOnline);
+      if (event.detail.isOnline) {
+        // When coming back online, reload data
+        loadAndCheckReminders();
+      }
+    };
+
+    window.addEventListener('nagme-connection-change', handleConnectionChange);
+    setIsOffline(!navigator.onLine); // Set initial offline status
+
+    requestNotificationPermission();
+    loadAndCheckReminders();
+
+    const interval = setInterval(() => {
+      checkNaggingReminders(remindersRef.current);
+      checkLocationReminders(remindersRef.current);
+    }, 10000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('nagme-connection-change', handleConnectionChange);
+    };
+  }, [userSettings]);
+
+  // New Effect: Listen for external updates to reminders
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'reminders-updated') {
+        console.log("Reminders have been updated elsewhere. Reloading dashboard...");
+        loadReminders(); // This function should also handle its own errors.
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  // Document title flashing for overdue reminders
+  useEffect(() => {
+    let interval;
+    if (naggingReminders.length > 0) {
+      let isToggled = false;
+      interval = setInterval(() => {
+        document.title = isToggled
+          ? `NagMe | ${naggingReminders.length} Overdue`
+          : `⚠️ URGENT: ${naggingReminders.length} Reminder(s)`;
+        isToggled = !isToggled;
+      }, 1000);
+    }
+    return () => {
+      clearInterval(interval);
+      document.title = "NagMe | Dashboard";
+    };
+  }, [naggingReminders]);
+
+  const requestNotificationPermission = async () => {
+    if ("Notification" in window && Notification.permission === "default") {
+      await Notification.requestPermission();
+    }
+  };
+
+  const isQuietTime = () => {
+    if (!userSettings || !userSettings.quiet_hours_enabled || !userSettings.quiet_hours_start || !userSettings.quiet_hours_end) {
+        return false;
+    }
+
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+
+    const [startH, startM] = userSettings.quiet_hours_start.split(':').map(Number);
+    const startTime = startH * 60 + startM;
+
+    const [endH, endM] = userSettings.quiet_hours_end.split(':').map(Number);
+    const endTime = endH * 60 + endM;
+
+    // Handle overnight case (e.g., 22:00 to 07:00)
+    if (startTime > endTime) {
+        return currentTime >= startTime || currentTime < endTime;
+    } else { // Handle same-day case (e.g., 09:00 to 17:00)
+        return currentTime >= startTime && currentTime < endTime;
+    }
+  };
+
+  const showPersistentNotification = (reminder) => {
+    if (!("Notification" in window) || Notification.permission !== "granted") {
+      return;
+    }
+
+    const existingNotification = activeNotifications.get(reminder.id);
+    if (existingNotification) {
+      existingNotification.close();
+    }
+
+    const notification = new Notification(`⚠️ URGENT: ${reminder.title}`, {
+      body: `Due: ${new Date(reminder.due_date).toLocaleString()}\n${reminder.description || 'Tap to complete or snooze'}`,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: `reminder-${reminder.id}`,
+      requireInteraction: true,
+      silent: false,
+      vibrate: [200, 100, 200],
+      actions: [
+        {
+          action: 'complete',
+          title: '✅ Complete'
+        },
+        {
+          action: 'snooze',
+          title: '💤 Snooze 10min'
+        }
+      ]
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+
+    notification.addEventListener('notificationclick', (event) => {
+      event.notification.close();
+
+      if (event.action === 'complete') {
+        handleCompleteReminder(reminder.id, false);
+      } else if (event.action === 'snooze') {
+        handleSnoozeReminder(reminder.id, 10);
+      } else {
+        window.focus();
+      }
+    });
+
+    setActiveNotifications(prev => new Map(prev.set(reminder.id, notification)));
+
+    const intervalKey = `persistent-notification-${reminder.id}`;
+    if (activeNotifications.has(intervalKey)) {
+      clearInterval(activeNotifications.get(intervalKey));
+    }
+
+    const persistentInterval = setInterval(() => {
+      if (naggingReminders.some(r => r.id === reminder.id)) {
+        showPersistentNotification(reminder);
+      } else {
+        clearInterval(persistentInterval);
+        setActiveNotifications(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(intervalKey);
+          return newMap;
+        });
+      }
+    }, 30000);
+    setActiveNotifications(prev => new Map(prev.set(intervalKey, persistentInterval)));
+  };
+
+  // Modified standalone loadReminders to support offline functionality
+  const loadReminders = async () => {
+    if (!userSettings) return;
+    try {
+      setIsLoading(true);
+      let data = [];
+      
+      if (navigator.onLine) {
+        try {
+          data = await Reminder.list("-created_date");
+          offlineStorage.cacheReminders(data);
+          setError(null);
+        } catch (err) {
+          console.warn("Failed to load from server, using cached data for refresh:", err);
+          data = offlineStorage.getCachedReminders();
+          setError(new Error("Using offline data - will sync when connection is restored"));
+        }
+      } else {
+        data = offlineStorage.getCachedReminders();
+        setError(new Error("Offline mode - showing cached data"));
+      }
+      
+      const userEmail = userSettings?.email?.toLowerCase();
+      const visibleReminders = data.filter(r => {
+        const createdBy = r.created_by?.toLowerCase();
+        const delegatedTo = r.delegated_to_email?.toLowerCase();
+        return createdBy === userEmail || delegatedTo === userEmail;
+      });
+      
+      setReminders(visibleReminders);
+      checkNaggingReminders(visibleReminders);
+      checkLocationReminders(visibleReminders);
+    } catch (err) {
+      console.error("Error loading reminders:", err);
+      setError(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c;
+  };
+
+  const checkLocationReminders = (reminderList) => {
+    if (isQuietTime()) {
+      console.log("Quiet time, skipping location-based nagging.");
+      return;
+    }
+    const listToCheck = reminderList || [];
+    const locationReminders = listToCheck.filter(r => r.status === 'pending' && r.location);
+    if (locationReminders.length === 0) return;
+
+    if (!navigator.geolocation) {
+        console.warn("Geolocation is not supported by your browser.");
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition((position) => {
+      const { latitude, longitude } = position.coords;
+      const newlyTriggered = [];
+
+      locationReminders.forEach(reminder => {
+        try {
+          const parts = reminder.location.split('|');
+          if (parts.length < 3) {
+            console.warn(`Invalid location format for reminder ${reminder.id}: ${reminder.location}`);
+            return;
+          }
+          const locLat = parseFloat(parts[1]);
+          const locLon = parseFloat(parts[2]);
+
+          if (!isNaN(locLat) && !isNaN(locLon)) {
+            const distance = getDistance(latitude, longitude, locLat, locLon);
+            if (distance < 200) {
+              if (!naggingReminders.some(nr => nr.id === reminder.id)) {
+                 newlyTriggered.push(reminder);
+              }
+            }
+          } else {
+            console.warn(`Could not parse coordinates for reminder ${reminder.id}: ${reminder.location}`);
+          }
+        } catch(e) {
+            console.error("Error parsing or checking location for reminder:", reminder.id, e);
+        }
+      });
+
+      if (newlyTriggered.length > 0) {
+        setNaggingReminders(prev => {
+            const currentNaggingIds = new Set(prev.map(r => r.id));
+            const distinctNew = newlyTriggered.filter(r => !currentNaggingIds.has(r.id));
+            distinctNew.forEach(reminder => {
+              showPersistentNotification(reminder);
+            });
+            return [...prev, ...distinctNew];
+        });
+      }
+
+    }, (error) => {
+      console.warn(`LOCATION ERROR(${error.code}): ${error.message}`);
+    }, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    });
+  };
+
+  const checkNaggingReminders = (reminderList) => {
+    if (isQuietTime()) {
+      console.log("Quiet time, skipping nagging.");
+      // Clear existing nagging reminders if we entered quiet hours
+      if (naggingReminders.length > 0) {
+        setNaggingReminders([]);
+      }
+      return;
+    }
+    const listToCheck = reminderList || [];
+    const now = new Date();
+    const overdue = listToCheck.filter(reminder =>
+      reminder.status === "pending" &&
+      reminder.nagging_enabled &&
+      new Date(reminder.due_date) <= now
+    );
+
+    setNaggingReminders(prevNaggingReminders => {
+      const prevNaggingIds = new Set(prevNaggingReminders.map(r => r.id));
+      const newOverdueForNotification = overdue.filter(r => !prevNaggingIds.has(r.id));
+
+      newOverdueForNotification.forEach(reminder => {
+        console.log(`New overdue reminder (${reminder.nagging_intensity || 'normal'} intensity):`, reminder.title);
+        showPersistentNotification(reminder);
+      });
+
+      return overdue;
+    });
+  };
+
+  const handleCompleteReminder = async (reminderId, requireConfirmation = false) => {
+    if (requireConfirmation) {
+      const confirmed = window.confirm("Are you sure you want to mark this reminder as completed?");
+      if (!confirmed) return;
+    }
+
+    try {
+      const updateData = {
+        status: "completed",
+        completed_at: new Date().toISOString()
+      };
+
+      if (navigator.onLine) {
+        // Try to update online first
+        try {
+          await Reminder.update(reminderId, updateData);
+        } catch (error) {
+          console.warn("Online update failed, using offline mode:", error);
+          await offlineStorage.updateReminder(reminderId, updateData);
+        }
+      } else {
+        // Use offline storage
+        await offlineStorage.updateReminder(reminderId, updateData);
+      }
+
+      // Clear notifications
+      const notification = activeNotifications.get(reminderId);
+      if (notification) {
+        notification.close();
+        setActiveNotifications(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(reminderId);
+          const intervalKey = `persistent-notification-${reminderId}`;
+          if (newMap.has(intervalKey)) {
+            clearInterval(newMap.get(intervalKey));
+            newMap.delete(intervalKey);
+          }
+          return newMap;
+        });
+      }
+
+      setNaggingReminders(prev => prev.filter(r => r.id !== reminderId));
+      
+      // Update local state immediately
+      setReminders(prev => prev.map(r => 
+        r.id === reminderId 
+          ? { ...r, ...updateData }
+          : r
+      ));
+      
+    } catch (error) {
+      console.error("Error completing reminder:", error);
+      setError(error);
+    }
+  };
+
+  const handleSnoozeReminder = async (reminderId, minutes = 10) => {
+    try {
+      const newDueDate = new Date();
+      newDueDate.setMinutes(newDueDate.getMinutes() + minutes);
+
+      const reminder = reminders.find(r => r.id === reminderId);
+      const updateData = {
+        due_date: newDueDate.toISOString(),
+        snooze_count: (reminder.snooze_count || 0) + 1
+      };
+
+      if (navigator.onLine) {
+        try {
+          await Reminder.update(reminderId, updateData);
+        } catch (error) {
+          console.warn("Online update failed, using offline mode:", error);
+          await offlineStorage.updateReminder(reminderId, updateData);
+        }
+      } else {
+        await offlineStorage.updateReminder(reminderId, updateData);
+      }
+
+      // Clear notifications
+      const notification = activeNotifications.get(reminderId);
+      if (notification) {
+        notification.close();
+        setActiveNotifications(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(reminderId);
+          const intervalKey = `persistent-notification-${reminderId}`;
+          if (newMap.has(intervalKey)) {
+            clearInterval(newMap.get(intervalKey));
+            newMap.delete(intervalKey);
+          }
+          return newMap;
+        });
+      }
+
+      setNaggingReminders(prev => prev.filter(r => r.id !== reminderId));
+      
+      // Update local state immediately
+      setReminders(prev => prev.map(r => 
+        r.id === reminderId 
+          ? { ...r, ...updateData }
+          : r
+      ));
+      
+    } catch (error) {
+      console.error("Error snoozing reminder:", error);
+      setError(error);
+    }
+  };
+
+  const handleDeleteReminder = async (reminderId) => {
+    const confirmed = window.confirm("Are you sure you want to permanently delete this reminder?");
+    if (!confirmed) return;
+
+    try {
+      if (navigator.onLine) {
+        try {
+          await Reminder.delete(reminderId);
+        } catch (error) {
+          console.warn("Online delete failed, using offline mode:", error);
+          await offlineStorage.deleteReminder(reminderId);
+        }
+      } else {
+        await offlineStorage.deleteReminder(reminderId);
+      }
+      
+      // Clear notifications
+      const notification = activeNotifications.get(reminderId);
+      if (notification) {
+        notification.close();
+        setActiveNotifications(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(reminderId);
+          const intervalKey = `persistent-notification-${reminderId}`;
+          if (newMap.has(intervalKey)) {
+            clearInterval(newMap.get(intervalKey));
+            newMap.delete(intervalKey);
+          }
+          return newMap;
+        });
+      }
+      
+      // Update local state immediately
+      setReminders(prev => prev.filter(r => r.id !== reminderId));
+      setNaggingReminders(prev => prev.filter(r => r.id !== reminderId));
+      
+      localStorage.setItem('reminders-updated', new Date().getTime().toString());
+    } catch (error) {
+      console.error("Error deleting reminder:", error);
+      setError(error);
+    }
+  };
+
+  const handleDismissNaggingAlert = (reminderId) => {
+    setNaggingReminders(prev => prev.filter(r => r.id !== reminderId));
+  };
+  
+  const filteredReminders = reminders.filter(reminder => {
+    const matchesSearch = reminder.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (reminder.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesFilter = activeFilter === "all" ||
+                         (activeFilter === "pending" && reminder.status === "pending") ||
+                         (activeFilter === "completed" && reminder.status === "completed") ||
+                         (activeFilter === "overdue" && reminder.status === "pending" && new Date(reminder.due_date) < new Date());
+
+    return matchesSearch && matchesFilter;
+  });
+
+  // Sorting logic
+  const sortedReminders = [...filteredReminders].sort((a, b) => {
+    switch (sortBy) {
+      case "newest":
+        return new Date(b.created_date) - new Date(a.created_date);
+      case "oldest":
+        return new Date(a.created_date) - new Date(b.created_date);
+      case "due-soon":
+        // Sort by due date, pending reminders first
+        if (a.status === 'completed' && b.status !== 'completed') return 1;
+        if (b.status === 'completed' && a.status !== 'completed') return -1;
+        return new Date(a.due_date) - new Date(b.due_date);
+      case "due-later":
+        // Sort by due date, completed reminders last
+        if (a.status === 'completed' && b.status !== 'completed') return 1;
+        if (b.status === 'completed' && a.status !== 'completed') return -1;
+        return new Date(b.due_date) - new Date(a.due_date);
+      case "priority":
+        const priorityOrder = { critical: 4, high: 3, medium: 2, low: 1 };
+        // Higher priority comes first
+        return (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0);
+      case "alphabetical":
+        return a.title.localeCompare(b.title);
+      default:
+        return 0;
+    }
+  });
+
+  const stats = {
+    total: filteredReminders.length,
+    pending: filteredReminders.filter(r => r.status === "pending").length,
+    completed: filteredReminders.filter(r => r.status === "completed").length,
+    overdue: filteredReminders.filter(r => r.status === "pending" && new Date(r.due_date) < new Date()).length
+  };
+
+  // Add this check before the main render
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-4">
+        <Card className="p-8 text-center max-w-lg w-full shadow-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Oops! Something went wrong.</h2>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">
+            We couldn't load your dashboard. It might be a temporary network issue.
+          </p>
+          <p className="text-sm text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-900/20 p-3 rounded-md mb-6 break-words">
+            <strong>Error:</strong> {error.message || 'An unknown error occurred.'}
+          </p>
+          <Button onClick={() => window.location.reload()} className="bg-amber-500 hover:bg-amber-600 text-white dark:text-slate-900">
+            <RotateCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!userSettings) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600 dark:text-slate-300">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 lg:p-8 bg-slate-50 dark:bg-slate-900">
+      {/* Nagging Alerts */}
+      <AnimatePresence>
+        {naggingReminders.map(reminder => (
+          <NaggingAlert
+            key={reminder.id}
+            reminder={reminder}
+            onComplete={() => handleCompleteReminder(reminder.id, true)}
+            onSnooze={(minutes) => handleSnoozeReminder(reminder.id, minutes)}
+            onDismiss={() => handleDismissNaggingAlert(reminder.id)}
+          />
+        ))}
+      </AnimatePresence>
+
+      <div className="max-w-7xl mx-auto">
+        {/* Header with Offline Indicator */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
+          <div>
+            <div className="flex items-center gap-4 mb-2">
+              <h1 className="text-3xl lg:text-4xl font-bold text-slate-900 dark:text-white">
+                Good morning! 👋
+              </h1>
+              <OfflineIndicator />
+            </div>
+            <p className="text-lg text-slate-600 dark:text-slate-300">
+              You have {stats.pending} pending reminders today
+              {isOffline && (
+                <span className="text-amber-600 dark:text-amber-400 ml-2">
+                  (Offline mode)
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="flex gap-3 w-full lg:w-auto">
+            <Link to={createPageUrl("Create")} className="flex-1 lg:flex-none">
+              <Button className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-900 font-semibold shadow-lg hover:shadow-xl transition-all duration-300">
+                <Plus className="w-5 h-5 mr-2" />
+                New Reminder
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <QuickStats stats={stats} />
+
+        {/* Search, Filters, and Sort */}
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-700 p-6 mb-8">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <Input
+                placeholder="Search your reminders..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-12 h-12 text-lg bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 focus:border-amber-500 dark:focus:border-amber-500 transition-colors duration-300"
+              />
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-4">
+              <FilterTabs
+                activeFilter={activeFilter}
+                onFilterChange={setActiveFilter}
+                stats={stats}
+              />
+              
+              {/* Sort Dropdown */}
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-slate-500" />
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Sort by..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest First</SelectItem>
+                    <SelectItem value="oldest">Oldest First</SelectItem>
+                    <SelectItem value="due-soon">Due Soon</SelectItem>
+                    <SelectItem value="due-later">Due Later</SelectItem>
+                    <SelectItem value="priority">Priority</SelectItem>
+                    <SelectItem value="alphabetical">A to Z</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Reminders List */}
+        <div className="space-y-4">
+          {isLoading ? (
+            Array(3).fill(0).map((_, i) => (
+              <div key={i} className="bg-white dark:bg-slate-800 rounded-2xl p-6 animate-pulse">
+                <div className="h-6 bg-slate-200 dark:bg-slate-600 rounded w-1/3 mb-4"></div>
+                <div className="h-4 bg-slate-200 dark:bg-slate-600 rounded w-2/3 mb-2"></div>
+                <div className="h-4 bg-slate-200 dark:bg-slate-600 rounded w-1/2"></div>
+              </div>
+            ))
+          ) : sortedReminders.length > 0 ? (
+            <AnimatePresence mode="popLayout">
+              {sortedReminders.map((reminder, index) => (
+                <ReminderCard
+                  key={reminder.id}
+                  reminder={reminder}
+                  index={index}
+                  onComplete={() => handleCompleteReminder(reminder.id)}
+                  onSnooze={(minutes) => handleSnoozeReminder(reminder.id, minutes)}
+                  onDelete={() => handleDeleteReminder(reminder.id)}
+                  currentUser={userSettings}
+                />
+              ))}
+            </AnimatePresence>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-16"
+            >
+              <div className="w-24 h-24 bg-slate-100 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Bell className="w-12 h-12 text-slate-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                No reminders found
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400 mb-6">
+                {searchTerm ? "Try adjusting your search terms" : "Create your first reminder to get started"}
+              </p>
+              <Link to={createPageUrl("Create")}>
+                <Button className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-900 font-semibold">
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create Reminder
+                </Button>
+              </Link>
+            </motion.div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
